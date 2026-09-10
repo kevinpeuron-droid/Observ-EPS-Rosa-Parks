@@ -1,0 +1,274 @@
+import React, { useEffect, useState } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { useStore } from '../store';
+import { ChevronLeft, Maximize, Activity } from 'lucide-react';
+import { cn } from '../lib/utils';
+
+export function Project() {
+  const { sessionId } = useParams<{ sessionId: string }>();
+  const { sessions, observations, sheets, classes, activities } = useStore();
+  
+  const session = sessions.find(s => s.id === sessionId);
+  const sheet = sheets.find(s => s.id === session?.sheetId);
+  const activity = activities.find(a => a.id === session?.activityId);
+  const cls = classes.find(c => c.id === activity?.classId);
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const sessionObs = observations.filter(o => o.sessionId === sessionId);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error("Error attempting to enable fullscreen:", err);
+      });
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  if (!session || !sheet || !cls) {
+    return <div className="p-8 text-center text-xl">Séance non trouvée ou non configurée.</div>;
+  }
+
+  // Calculate aggregates for both students and teams
+  const allTargets = [
+    ...cls.students.map(s => ({ ...s, isTeam: false })),
+    ...(cls.teams || []).map(t => ({ ...t, isTeam: true }))
+  ];
+
+  const targetStats = allTargets.map(target => {
+    const obs = sessionObs.filter(o => o.targetId === target.id);
+    const aggregates: Record<string, any> = {};
+    
+    sheet.fields.forEach(f => {
+      if (f.type === 'counter') {
+        aggregates[f.id] = obs.reduce((sum, o) => sum + ((o.data[f.id] as number) || 0), 0);
+      } else if (f.type === 'number' || f.type === 'speed_30s') {
+        const validObs = obs.filter(o => o.data[f.id] !== undefined && o.data[f.id] !== '');
+        if (validObs.length > 0) {
+           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           aggregates[f.id] = latest.data[f.id] as number;
+        }
+      } else if (f.type === 'orienteering_star') {
+        const validObs = obs.filter(o => o.data[f.id]);
+        if (validObs.length > 0) {
+           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           const data = latest.data[f.id] as Record<string, any>;
+           let ok = 0;
+           let wrong = 0;
+           let totalMs = 0;
+           Object.values(data).forEach(balise => {
+             if (balise.status === 'ok') { ok++; totalMs += (balise.elapsedMs || 0); }
+             if (balise.status === 'wrong') { wrong++; totalMs += (balise.elapsedMs || 0); }
+           });
+           aggregates[f.id] = { ok, wrong, totalMs };
+        }
+      } else if (f.type === 'training_log') {
+        const validObs = obs.filter(o => o.data[f.id]);
+        if (validObs.length > 0) {
+           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           const data = latest.data[f.id];
+           let totalVolume = 0;
+           data.sets.forEach((set: any) => {
+             totalVolume += (set.reps || 0) * (set.weight || 0);
+           });
+           aggregates[f.id] = { profile: data.profile, sets: data.sets.length, volume: totalVolume };
+        }
+      } else if (f.type === 'project_target') {
+        const validObs = obs.filter(o => o.data[f.id]);
+        if (validObs.length > 0) {
+           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           aggregates[f.id] = latest.data[f.id];
+        }
+      } else if (f.type === 'ratio_action') {
+        const validObs = obs.filter(o => o.data[f.id]);
+        if (validObs.length > 0) {
+           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           aggregates[f.id] = latest.data[f.id];
+        }
+      } else if (f.type === 'sequence_planner') {
+        const validObs = obs.filter(o => o.data[f.id]);
+        if (validObs.length > 0) {
+           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           const data = latest.data[f.id];
+           const validated = data.filter((item: any) => item.validated).length;
+           aggregates[f.id] = { total: data.length, validated };
+        }
+      }
+    });
+
+    return {
+      target,
+      obsCount: obs.length,
+      aggregates
+    };
+  }).filter(s => s.obsCount > 0).sort((a, b) => b.obsCount - a.obsCount);
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col overflow-hidden">
+      <header className="p-6 flex items-center justify-between border-b border-slate-800 bg-slate-900/50">
+        <div className="flex items-center gap-4">
+          <Link to={`/session/${session.id}`} className="p-2 hover:bg-slate-800 rounded-full transition-colors">
+            <ChevronLeft className="w-6 h-6" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Activity className="w-6 h-6 text-emerald-500" />
+              Live Dashboard: {session.name}
+            </h1>
+            <p className="text-slate-400">{cls.name} • {sheet.name}</p>
+          </div>
+        </div>
+        <button 
+          onClick={toggleFullscreen}
+          className="p-3 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-2 font-medium"
+        >
+          <Maximize className="w-5 h-5" />
+          {isFullscreen ? 'Quitter' : 'Plein écran'}
+        </button>
+      </header>
+
+      <main className="flex-1 p-8 overflow-y-auto">
+        {targetStats.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-4">
+            <Activity className="w-16 h-16 opacity-50 animate-pulse" />
+            <p className="text-2xl">En attente de données...</p>
+            <p>Les observations saisies par les élèves apparaîtront ici en temps réel.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {targetStats.map(({ target, obsCount, aggregates }) => (
+              <div 
+                key={target.id} 
+                className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-500"
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-bl-full -mr-8 -mt-8" />
+                <h3 className="text-2xl font-bold mb-6 text-white">
+                  {target.isTeam && <span className="text-sm font-bold text-emerald-500 uppercase tracking-wider block mb-1">Équipe</span>}
+                  {target.name}
+                </h3>
+                
+                <div className="space-y-4 relative z-10">
+                  {sheet.fields.map(field => {
+                    if (field.type === 'counter' || field.type === 'number' || field.type === 'speed_30s') {
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2">
+                          <div className="flex items-center justify-between">
+                             <span className="text-slate-400 font-medium">{field.label}</span>
+                             <span className="text-3xl font-bold font-mono text-emerald-400">
+                               {aggregates[field.id] !== undefined ? aggregates[field.id] : '-'}
+                               {field.type === 'speed_30s' && aggregates[field.id] !== undefined && ' m'}
+                             </span>
+                          </div>
+                          {field.type === 'speed_30s' && aggregates[field.id] !== undefined && (
+                             <div className="text-right text-sm text-emerald-500/80 font-bold">
+                               {((aggregates[field.id] as number) * 0.12).toFixed(1)} km/h
+                             </div>
+                          )}
+                        </div>
+                      );
+                    } else if (field.type === 'orienteering_star' && aggregates[field.id]) {
+                      const stats = aggregates[field.id];
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-3 border border-slate-800">
+                          <span className="text-slate-400 font-medium">{field.label}</span>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col">
+                              <span className="text-xs text-slate-500 uppercase font-bold">Validées</span>
+                              <span className="text-2xl font-bold text-emerald-400">{stats.ok}</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-xs text-slate-500 uppercase font-bold">Fausses</span>
+                              <span className="text-2xl font-bold text-red-400">{stats.wrong}</span>
+                            </div>
+                          </div>
+                          <div className="mt-2 text-sm text-emerald-500 font-mono">
+                            Temps cumulé: {Math.floor(stats.totalMs / 60000)}m {Math.floor((stats.totalMs / 1000) % 60).toString().padStart(2, '0')}s
+                          </div>
+                        </div>
+                      );
+                    } else if (field.type === 'training_log' && aggregates[field.id]) {
+                      const stats = aggregates[field.id];
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2 border border-slate-800">
+                          <span className="text-slate-400 font-medium">{field.label} {stats.profile && `(${stats.profile})`}</span>
+                          <div className="flex justify-between items-center mt-2">
+                             <div className="text-sm text-slate-500">Séries: <span className="text-emerald-400 font-bold">{stats.sets}</span></div>
+                             <div className="text-sm text-slate-500">Volume: <span className="text-indigo-400 font-bold">{stats.volume} kg</span></div>
+                          </div>
+                        </div>
+                      );
+                    } else if (field.type === 'ratio_action' && aggregates[field.id]) {
+                      const stats = aggregates[field.id];
+                      const total = stats.success + stats.fail;
+                      const ratio = total > 0 ? Math.round((stats.success / total) * 100) : 0;
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2 border border-slate-800">
+                          <div className="flex justify-between items-center">
+                             <span className="text-slate-400 font-medium">{field.label}</span>
+                             <span className={`text-xl font-bold font-mono ${ratio >= 50 ? 'text-emerald-400' : 'text-amber-400'}`}>{ratio}%</span>
+                          </div>
+                          <div className="flex gap-4 mt-2">
+                             <div className="text-xs text-slate-500">Réussis: <span className="text-emerald-400 font-bold">{stats.success}</span></div>
+                             <div className="text-xs text-slate-500">Ratés: <span className="text-red-400 font-bold">{stats.fail}</span></div>
+                          </div>
+                        </div>
+                      );
+                    } else if (field.type === 'project_target' && aggregates[field.id]) {
+                      const stats = aggregates[field.id];
+                      const diff = stats.actual - stats.target;
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2 border border-slate-800">
+                          <span className="text-slate-400 font-medium">{field.label}</span>
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <div className="text-xs text-slate-500">Cible: <span className="text-blue-400 font-bold">{stats.target}</span></div>
+                            <div className="text-xs text-slate-500">Réel: <span className="text-indigo-400 font-bold">{stats.actual}</span></div>
+                          </div>
+                          <div className={`text-sm mt-1 font-bold ${Math.abs(diff) === 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                             Écart: {diff > 0 ? '+' : ''}{diff}
+                          </div>
+                        </div>
+                      );
+                    } else if (field.type === 'sequence_planner' && aggregates[field.id]) {
+                      const stats = aggregates[field.id];
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2 border border-slate-800">
+                          <div className="flex justify-between items-center">
+                             <span className="text-slate-400 font-medium">{field.label}</span>
+                             <span className={`text-xl font-bold font-mono ${stats.validated === stats.total && stats.total > 0 ? 'text-emerald-400' : 'text-slate-300'}`}>
+                               {stats.validated} / {stats.total}
+                             </span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+                
+                <div className="mt-6 pt-4 border-t border-slate-800/50 flex justify-between items-center text-sm text-slate-500">
+                  <span>Mises à jour: {obsCount}</span>
+                  <span className="flex h-3 w-3 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
