@@ -30,10 +30,25 @@ export function Observe() {
 
   if (!session || !sheet || !cls) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-4">
-        <div className="text-center">
+      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4">
+        <div className="text-center mb-6">
           <h1 className="text-2xl font-bold mb-2">Séance non configurée</h1>
-          <p className="text-slate-400">Demandez à votre professeur de vérifier le QR Code.</p>
+          <p className="text-slate-400">Demandez à votre professeur de vérifier le QR Code ou la configuration.</p>
+        </div>
+        <div className="bg-slate-800 p-4 rounded-xl text-left text-xs font-mono text-slate-300 space-y-1 w-full max-w-sm">
+          <p className="text-slate-400 font-bold mb-2 border-b border-slate-700 pb-1">-- Diagnostic --</p>
+          <p>ID Séance (URL) : <span className="text-white">{sessionId}</span></p>
+          <p>Séance trouvée : {session ? <span className="text-emerald-400">Oui</span> : <span className="text-red-400">Non</span>}</p>
+          {session && (
+            <>
+              <p>Activité liée : {activity ? <span className="text-emerald-400">Oui</span> : <span className="text-red-400">Non</span>}</p>
+              <p>Classe liée : {cls ? <span className="text-emerald-400">Oui</span> : <span className="text-red-400">Non</span>}</p>
+              <p>Fiche sél. (ID) : <span className="text-white">{session.sheetId || 'Aucune'}</span></p>
+              <p>Fiche trouvée : {sheet ? <span className="text-emerald-400">Oui</span> : <span className="text-red-400">Non</span>}</p>
+            </>
+          )}
+          <p className="pt-2 mt-2 border-t border-slate-700">Données chargées :</p>
+          <p>{sessions.length} séances, {sheets.length} fiches, {classes.length} classes.</p>
         </div>
       </div>
     );
