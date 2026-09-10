@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Activity, ClassGroup, ObservationRecord, ObservationSheet, Session, TemplateActivity, TemplateSheet, ObservationField } from './types';
+import { db } from './lib/firebase';
+import { doc, collection, onSnapshot, setDoc, addDoc, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 
 interface StoreState {
   classes: ClassGroup[];
@@ -26,23 +28,22 @@ interface StoreContextType extends StoreState {
   updateClass: (id: string, cls: Partial<ClassGroup>) => void;
   deleteClass: (id: string) => void;
   bulkImportClasses: (importData: { className: string, students: { name: string }[] }[]) => void;
-
+  
   addActivity: (act: Omit<Activity, 'id'>) => void;
   updateActivity: (id: string, act: Partial<Activity>) => void;
   deleteActivity: (id: string) => void;
-
+  
   addSession: (session: Omit<Session, 'id'>) => void;
   updateSession: (id: string, session: Partial<Session>) => void;
   deleteSession: (id: string) => void;
-
+  
   addSheet: (sheet: Omit<ObservationSheet, 'id'>) => void;
   updateSheet: (id: string, sheet: Partial<ObservationSheet>) => void;
   deleteSheet: (id: string) => void;
-
+  
   addObservation: (obs: Omit<ObservationRecord, 'id'>) => void;
   clearObservations: (sessionId: string) => void;
-
-  // Templates
+  
   addTemplateActivity: (name: string, ca?: 1 | 2 | 3 | 4 | 5) => void;
   deleteTemplateActivity: (id: string) => void;
   addTemplateSheet: (templateActivityId: string, name: string, isMultiStudent?: boolean) => void;
@@ -58,34 +59,134 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<StoreState>(() => {
-    const saved = localStorage.getItem('eps-tracker-data');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return {
-          ...initialState,
-          ...parsed,
-          templateActivities: parsed.templateActivities || [],
-          templateSheets: parsed.templateSheets || []
-        };
-      } catch (e) {
-        console.error('Failed to parse local storage data');
-      }
-    }
-    return initialState;
-  });
+  const [state, setState] = useState<StoreState>(initialState);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem('eps-tracker-data', JSON.stringify(state));
-  }, [state]);
+    const workspaceRef = doc(db, 'workspaces', 'default');
+    
+    const unsubscribeWorkspace = onSnapshot(workspaceRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setState(s => ({
+          ...s,
+          classes: data.classes || [],
+          activities: data.activities || [],
+          sessions: data.sessions || [],
+          sheets: data.sheets || [],
+          templateActivities: data.templateActivities || [],
+          templateSheets: data.templateSheets || [],
+        }));
+      } else {
+        // Check if we have local storage data to migrate
+        const saved = localStorage.getItem('eps-tracker-data');
+        let initialData = null;
+        
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            initialData = {
+              classes: parsed.classes || [],
+              activities: parsed.activities || [],
+              sessions: parsed.sessions || [],
+              sheets: parsed.sheets || [],
+              templateActivities: parsed.templateActivities || [],
+              templateSheets: parsed.templateSheets || []
+            };
+            
+            // Migrate observations
+            if (parsed.observations && parsed.observations.length > 0) {
+              const obsRef = collection(db, 'workspaces', 'default', 'observations');
+              const batch = writeBatch(db);
+              parsed.observations.forEach((obs: any) => {
+                const newDocRef = doc(obsRef, obs.id);
+                batch.set(newDocRef, obs);
+              });
+              batch.commit().catch(console.error);
+            }
+          } catch(e) {
+            console.error('Failed to parse local storage for migration');
+          }
+        }
+        
+        if (!initialData) {
+          // Initialize default templates if empty
+          const demiFondId = generateId();
+          const badId = generateId();
+          
+          initialData = {
+            classes: [],
+            activities: [],
+            sessions: [],
+            sheets: [],
+            templateActivities: [
+              { id: demiFondId, name: '1/2 Fond', ca: 1 },
+              { id: badId, name: 'Badminton', ca: 4 }
+            ],
+            templateSheets: [
+              {
+                id: generateId(),
+                templateActivityId: demiFondId,
+                name: '30"/30" (Vitesse et FC)',
+                fields: [
+                  { id: generateId(), label: 'FC Avant Échauffement', type: 'number' },
+                  { id: generateId(), label: 'FC Après Échauffement', type: 'number' },
+                  { id: generateId(), label: 'Distance sur 30" (m)', type: 'speed_30s' },
+                  { id: generateId(), label: 'FC Fin de séance', type: 'number' }
+                ]
+              },
+              {
+                id: generateId(),
+                templateActivityId: badId,
+                name: 'Match Standard',
+                fields: [
+                  { id: generateId(), label: 'Points marqués', type: 'counter' },
+                  { id: generateId(), label: 'Fautes', type: 'counter' },
+                  { id: generateId(), label: 'Match gagné', type: 'boolean' }
+                ]
+              }
+            ]
+          };
+        }
+        
+        setDoc(workspaceRef, initialData).catch(err => {
+           console.error("Erreur lors de la création du workspace :", err);
+        });
+      }
+      setLoaded(true);
+    }, (error) => {
+      console.error("Erreur de permission Workspace (onSnapshot) :", error);
+    });
 
-  const addClass = (cls: Omit<ClassGroup, 'id'>) => setState(s => ({ ...s, classes: [...s.classes, { ...cls, id: generateId() }] }));
-  const updateClass = (id: string, cls: Partial<ClassGroup>) => setState(s => ({ ...s, classes: s.classes.map(c => (c.id === id ? { ...c, ...cls } : c)) }));
-  const deleteClass = (id: string) => setState(s => ({ ...s, classes: s.classes.filter(c => c.id !== id) }));
+    const observationsRef = collection(db, 'workspaces', 'default', 'observations');
+    const unsubscribeObservations = onSnapshot(observationsRef, (snapshot) => {
+      const obs = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as ObservationRecord));
+      setState(s => ({ ...s, observations: obs }));
+    }, (error) => {
+      console.error("Erreur de permission Observations (onSnapshot) :", error);
+    });
+
+    return () => {
+      unsubscribeWorkspace();
+      unsubscribeObservations();
+    };
+  }, []);
+
+  const updateWorkspace = async (updater: (s: StoreState) => Partial<StoreState>) => {
+    const changes = updater(state);
+    const workspaceRef = doc(db, 'workspaces', 'default');
+    setState(s => ({ ...s, ...changes }));
+    await setDoc(workspaceRef, changes, { merge: true }).catch(err => {
+      console.error("Erreur lors de la mise à jour (Permissions ?) :", err);
+    });
+  };
+
+  const addClass = (cls: Omit<ClassGroup, 'id'>) => updateWorkspace(s => ({ classes: [...s.classes, { ...cls, id: generateId() }] }));
+  const updateClass = (id: string, cls: Partial<ClassGroup>) => updateWorkspace(s => ({ classes: s.classes.map(c => (c.id === id ? { ...c, ...cls } : c)) }));
+  const deleteClass = (id: string) => updateWorkspace(s => ({ classes: s.classes.filter(c => c.id !== id) }));
   
   const bulkImportClasses = (importData: { className: string, students: { name: string }[] }[]) => {
-    setState(s => {
+    updateWorkspace(s => {
       const newClasses = [...s.classes];
       importData.forEach(group => {
         let cls = newClasses.find(c => c.name.toLowerCase() === group.className.toLowerCase());
@@ -100,52 +201,66 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const newStudents = group.students.map(st => ({ id: generateId(), name: st.name }));
         cls.students = [...cls.students, ...newStudents];
       });
-      return { ...s, classes: newClasses };
+      return { classes: newClasses };
     });
   };
 
-  const addActivity = (act: Omit<Activity, 'id'>) => setState(s => ({ ...s, activities: [...s.activities, { ...act, id: generateId() }] }));
-  const updateActivity = (id: string, act: Partial<Activity>) => setState(s => ({ ...s, activities: s.activities.map(a => (a.id === id ? { ...a, ...act } : a)) }));
-  const deleteActivity = (id: string) => setState(s => ({ ...s, activities: s.activities.filter(a => a.id !== id) }));
+  const addActivity = (act: Omit<Activity, 'id'>) => updateWorkspace(s => ({ activities: [...s.activities, { ...act, id: generateId() }] }));
+  const updateActivity = (id: string, act: Partial<Activity>) => updateWorkspace(s => ({ activities: s.activities.map(a => (a.id === id ? { ...a, ...act } : a)) }));
+  const deleteActivity = (id: string) => updateWorkspace(s => ({ activities: s.activities.filter(a => a.id !== id) }));
 
-  const addSession = (session: Omit<Session, 'id'>) => setState(s => ({ ...s, sessions: [...s.sessions, { ...session, id: generateId() }] }));
-  const updateSession = (id: string, session: Partial<Session>) => setState(s => ({ ...s, sessions: s.sessions.map(ss => (ss.id === id ? { ...ss, ...session } : ss)) }));
-  const deleteSession = (id: string) => setState(s => ({ ...s, sessions: s.sessions.filter(ss => ss.id !== id) }));
+  const addSession = (session: Omit<Session, 'id'>) => updateWorkspace(s => ({ sessions: [...s.sessions, { ...session, id: generateId() }] }));
+  const updateSession = (id: string, session: Partial<Session>) => updateWorkspace(s => ({ sessions: s.sessions.map(ss => (ss.id === id ? { ...ss, ...session } : ss)) }));
+  const deleteSession = (id: string) => updateWorkspace(s => ({ sessions: s.sessions.filter(ss => ss.id !== id) }));
 
-  const addSheet = (sheet: Omit<ObservationSheet, 'id'>) => setState(s => ({ ...s, sheets: [...s.sheets, { ...sheet, id: generateId() }] }));
-  const updateSheet = (id: string, sheet: Partial<ObservationSheet>) => setState(s => ({ ...s, sheets: s.sheets.map(sh => (sh.id === id ? { ...sh, ...sheet } : sh)) }));
-  const deleteSheet = (id: string) => setState(s => ({ ...s, sheets: s.sheets.filter(sh => sh.id !== id) }));
+  const addSheet = (sheet: Omit<ObservationSheet, 'id'>) => updateWorkspace(s => ({ sheets: [...s.sheets, { ...sheet, id: generateId() }] }));
+  const updateSheet = (id: string, sheet: Partial<ObservationSheet>) => updateWorkspace(s => ({ sheets: s.sheets.map(sh => (sh.id === id ? { ...sh, ...sheet } : sh)) }));
+  const deleteSheet = (id: string) => updateWorkspace(s => ({ sheets: s.sheets.filter(sh => sh.id !== id) }));
 
-  const addObservation = (obs: Omit<ObservationRecord, 'id'>) => setState(s => ({ ...s, observations: [...s.observations, { ...obs, id: generateId() }] }));
-  const clearObservations = (sessionId: string) => setState(s => ({ ...s, observations: s.observations.filter(o => o.sessionId !== sessionId) }));
+  const addObservation = async (obs: Omit<ObservationRecord, 'id'>) => {
+    const observationsRef = collection(db, 'workspaces', 'default', 'observations');
+    await addDoc(observationsRef, obs).catch(err => {
+      console.error("Erreur addObservation (Permissions ?) :", err);
+    });
+  };
 
-  // Templates implementation
+  const clearObservations = async (sessionId: string) => {
+    const observationsRef = collection(db, 'workspaces', 'default', 'observations');
+    const snapshot = await getDocs(observationsRef);
+    const batch = writeBatch(db);
+    snapshot.docs.forEach(d => {
+      if (d.data().sessionId === sessionId) {
+        batch.delete(d.ref);
+      }
+    });
+    await batch.commit().catch(err => {
+      console.error("Erreur clearObservations :", err);
+    });
+  };
+
   const addTemplateActivity = (name: string, ca: 1 | 2 | 3 | 4 | 5 = 1) => {
-    setState(s => ({ ...s, templateActivities: [...s.templateActivities, { id: generateId(), name, ca }] }));
+    updateWorkspace(s => ({ templateActivities: [...s.templateActivities, { id: generateId(), name, ca }] }));
   };
 
   const deleteTemplateActivity = (id: string) => {
-    setState(s => ({
-      ...s,
+    updateWorkspace(s => ({
       templateActivities: s.templateActivities.filter(t => t.id !== id),
       templateSheets: s.templateSheets.filter(ts => ts.templateActivityId !== id)
     }));
   };
 
   const addTemplateSheet = (templateActivityId: string, name: string, isMultiStudent = false) => {
-    setState(s => ({
-      ...s,
+    updateWorkspace(s => ({
       templateSheets: [...s.templateSheets, { id: generateId(), templateActivityId, name, fields: [], isMultiStudent }]
     }));
   };
 
   const deleteTemplateSheet = (id: string) => {
-    setState(s => ({ ...s, templateSheets: s.templateSheets.filter(ts => ts.id !== id) }));
+    updateWorkspace(s => ({ templateSheets: s.templateSheets.filter(ts => ts.id !== id) }));
   };
 
   const addFieldToTemplateSheet = (sheetId: string, field: Omit<ObservationField, 'id'>) => {
-    setState(s => ({
-      ...s,
+    updateWorkspace(s => ({
       templateSheets: s.templateSheets.map(ts => {
         if (ts.id === sheetId) {
           return { ...ts, fields: [...ts.fields, { ...field, id: generateId() }] };
@@ -156,8 +271,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const removeFieldFromTemplateSheet = (sheetId: string, fieldId: string) => {
-    setState(s => ({
-      ...s,
+    updateWorkspace(s => ({
       templateSheets: s.templateSheets.map(ts => {
         if (ts.id === sheetId) {
           return { ...ts, fields: ts.fields.filter(f => f.id !== fieldId) };
@@ -168,10 +282,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const addActivityFromTemplate = (classId: string, templateId: string) => {
-    setState(s => {
+    updateWorkspace(s => {
       const template = s.templateActivities.find(t => t.id === templateId);
-      if (!template) return s;
-
+      if (!template) return {};
       const newActivityId = generateId();
       const newActivity = { id: newActivityId, classId, name: template.name };
       
@@ -181,55 +294,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         activityId: newActivityId,
         name: ts.name,
         isMultiStudent: ts.isMultiStudent,
-        fields: ts.fields.map(f => ({ ...f, id: generateId() })) // deep copy fields to avoid ref issues
+        fields: ts.fields.map(f => ({ ...f, id: generateId() }))
       }));
 
       return {
-        ...s,
         activities: [...s.activities, newActivity],
         sheets: [...s.sheets, ...newSheets]
       };
     });
   };
 
-  // Seed default templates if empty
-  useEffect(() => {
-    if (state.templateActivities.length === 0) {
-      const demiFondId = generateId();
-      const badId = generateId();
-      
-      setState(s => ({
-        ...s,
-        templateActivities: [
-          { id: demiFondId, name: '1/2 Fond' },
-          { id: badId, name: 'Badminton' }
-        ],
-        templateSheets: [
-          {
-            id: generateId(),
-            templateActivityId: demiFondId,
-            name: '30"/30" (Vitesse et FC)',
-            fields: [
-              { id: generateId(), label: 'FC Avant Échauffement', type: 'number' },
-              { id: generateId(), label: 'FC Après Échauffement', type: 'number' },
-              { id: generateId(), label: 'Distance sur 30" (m)', type: 'speed_30s' },
-              { id: generateId(), label: 'FC Fin de séance', type: 'number' }
-            ]
-          },
-          {
-            id: generateId(),
-            templateActivityId: badId,
-            name: 'Match Standard',
-            fields: [
-              { id: generateId(), label: 'Points marqués', type: 'counter' },
-              { id: generateId(), label: 'Fautes', type: 'counter' },
-              { id: generateId(), label: 'Match gagné', type: 'boolean' }
-            ]
-          }
-        ]
-      }));
-    }
-  }, []);
+  if (!loaded) {
+    return <div className="h-screen w-full flex items-center justify-center text-slate-500 font-medium">Chargement des données en temps réel...</div>;
+  }
 
   const value = {
     ...state,
