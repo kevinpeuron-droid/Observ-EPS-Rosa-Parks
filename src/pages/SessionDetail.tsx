@@ -34,7 +34,7 @@ export function SessionDetail() {
     updateSession(session.id, { sheetId: e.target.value });
   };
 
-  const observeUrl = `${window.location.origin}/observe/${session.id}`;
+  const observeUrl = `${window.location.origin}/#/observe/${session.id}`;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 ease-out">

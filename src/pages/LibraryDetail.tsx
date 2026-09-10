@@ -62,7 +62,12 @@ export function LibraryDetail() {
     training_log: 'Carnet Musculation (Séries/Reps/Charge)',
     project_target: 'Projet de performance (Cible vs Réel)',
     ratio_action: 'Bilan de passes/actions (Réussite / Échec)',
-    sequence_planner: 'Projet d\'enchaînement (Step / Gym)'
+    sequence_planner: 'Projet d\'enchaînement (Step / Gym)',
+    performance_log: 'Carnet de Perf CA1 (1/2 fond, Allure, RPE)',
+    orienteering_log: 'Carnet de Course d\'Orientation (CA2)',
+    artistic_rating: 'Grille d\'évaluation CA3 (Danse / Gym)',
+    match_stats: 'Statistiques de Match CA4 (Sports Co / Raquettes)',
+    health_fitness_log: 'Carnet Santé & Entretien CA5 (BPM, Ateliers, Fatigue)'
   };
 
   return (

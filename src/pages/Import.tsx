@@ -17,7 +17,6 @@ export function Import() {
   const [data, setData] = useState<any[]>([]);
   
   const [lastNameCol, setLastNameCol] = useState<string>('');
-  const [firstNameCol, setFirstNameCol] = useState<string>('');
   const [classCol, setClassCol] = useState<string>('');
   const [defaultClassName, setDefaultClassName] = useState<string>('');
   
@@ -40,8 +39,7 @@ export function Import() {
         const fields = results.meta.fields || [];
         const findCol = (keywords: string[]) => fields.find(f => keywords.some(k => f.toLowerCase().includes(k))) || '';
         
-        setLastNameCol(findCol(['nom']));
-        setFirstNameCol(findCol(['prenom', 'prénom']));
+        setLastNameCol(findCol(['nom', 'prenom', 'élève', 'eleve']));
         setClassCol(findCol(['classe', 'groupe']));
       }
     });
@@ -53,9 +51,8 @@ export function Import() {
     const studentsByClass: Record<string, { name: string }[]> = {};
     
     data.forEach(row => {
-      let nom = row[lastNameCol] || '';
-      let prenom = firstNameCol ? row[firstNameCol] || '' : '';
-      let fullName = prenom ? `${nom} ${prenom}`.trim() : nom;
+      let fullName = row[lastNameCol] || '';
+      fullName = fullName.trim();
       
       let className = classCol ? row[classCol] || defaultClassName : defaultClassName;
       if (!className) className = 'Classe Importée';
@@ -144,27 +141,15 @@ export function Import() {
             <CardDescription>Indiquez à quoi correspondent les colonnes de votre fichier.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700 flex items-center gap-1">
-                  Nom <span className="text-red-500">*</span>
+                  Nom Prénom (Élève) <span className="text-red-500">*</span>
                 </label>
                 <select 
                   className="w-full flex h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
                   value={lastNameCol}
                   onChange={e => setLastNameCol(e.target.value)}
-                >
-                  <option value="">-- Ignorer / Non présent --</option>
-                  {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Prénom (Optionnel)</label>
-                <select 
-                  className="w-full flex h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-                  value={firstNameCol}
-                  onChange={e => setFirstNameCol(e.target.value)}
                 >
                   <option value="">-- Ignorer / Non présent --</option>
                   {columns.map(c => <option key={c} value={c}>{c}</option>)}

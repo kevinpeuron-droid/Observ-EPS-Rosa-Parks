@@ -30,7 +30,7 @@ export type TemplateSheet = {
   isMultiStudent?: boolean;
 };
 
-export type ObservationFieldType = 'counter' | 'rating' | 'boolean' | 'number' | 'speed_30s' | 'orienteering_star' | 'training_log' | 'project_target' | 'ratio_action' | 'sequence_planner';
+export type ObservationFieldType = 'counter' | 'rating' | 'boolean' | 'number' | 'speed_30s' | 'orienteering_star' | 'training_log' | 'project_target' | 'ratio_action' | 'sequence_planner' | 'performance_log' | 'orienteering_log' | 'artistic_rating' | 'match_stats' | 'health_fitness_log';
 
 export type ObservationField = {
   id: string;

@@ -8,6 +8,11 @@ import { TrainingLog } from '../components/TrainingLog';
 import { RatioAction } from '../components/RatioAction';
 import { ProjectTarget } from '../components/ProjectTarget';
 import { SequencePlanner } from '../components/SequencePlanner';
+import { PerformanceLog } from '../components/PerformanceLog';
+import { OrienteeringLog } from '../components/OrienteeringLog';
+import { ArtisticRating } from '../components/ArtisticRating';
+import { MatchStats } from '../components/MatchStats';
+import { HealthFitnessLog } from '../components/HealthFitnessLog';
 
 export function Observe() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -353,6 +358,81 @@ export function Observe() {
 
                     {field.type === 'sequence_planner' && (
                       <SequencePlanner 
+                        value={studentData[field.id]}
+                        onChange={(newVal) => {
+                          setData(prev => {
+                            const targetData = prev[targetId] || {};
+                            return {
+                              ...prev,
+                              [targetId]: { ...targetData, [field.id]: newVal }
+                            };
+                          });
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'performance_log' && (
+                      <PerformanceLog 
+                        value={studentData[field.id]}
+                        onChange={(newVal) => {
+                          setData(prev => {
+                            const targetData = prev[targetId] || {};
+                            return {
+                              ...prev,
+                              [targetId]: { ...targetData, [field.id]: newVal }
+                            };
+                          });
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'orienteering_log' && (
+                      <OrienteeringLog 
+                        value={studentData[field.id]}
+                        onChange={(newVal) => {
+                          setData(prev => {
+                            const targetData = prev[targetId] || {};
+                            return {
+                              ...prev,
+                              [targetId]: { ...targetData, [field.id]: newVal }
+                            };
+                          });
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'artistic_rating' && (
+                      <ArtisticRating 
+                        value={studentData[field.id]}
+                        onChange={(newVal) => {
+                          setData(prev => {
+                            const targetData = prev[targetId] || {};
+                            return {
+                              ...prev,
+                              [targetId]: { ...targetData, [field.id]: newVal }
+                            };
+                          });
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'match_stats' && (
+                      <MatchStats 
+                        value={studentData[field.id]}
+                        onChange={(newVal) => {
+                          setData(prev => {
+                            const targetData = prev[targetId] || {};
+                            return {
+                              ...prev,
+                              [targetId]: { ...targetData, [field.id]: newVal }
+                            };
+                          });
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'health_fitness_log' && (
+                      <HealthFitnessLog 
                         value={studentData[field.id]}
                         onChange={(newVal) => {
                           setData(prev => {

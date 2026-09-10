@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Activity, Plus, ChevronRight, UserPlus, Trash2, Eye } from 'lucide-react';
+import { Activity, Plus, ChevronRight, UserPlus, Trash2, Eye, Edit2, Save, X } from 'lucide-react';
 
 export function ClassDetail() {
   const { classId } = useParams<{ classId: string }>();
-  const { classes, activities, updateClass, templateActivities, addActivityFromTemplate } = useStore();
+  const navigate = useNavigate();
+  const { classes, activities, updateClass, deleteClass, templateActivities, addActivityFromTemplate } = useStore();
   
   const cls = classes.find(c => c.id === classId);
   const classActivities = activities.filter(a => a.classId === classId);
@@ -17,9 +18,30 @@ export function ClassDetail() {
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [newTeamName, setNewTeamName] = useState('');
 
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState('');
+
+  useEffect(() => {
+    if (cls) setEditedName(cls.name);
+  }, [cls?.name]);
+
   if (!cls) {
     return <div className="p-8 text-center text-slate-500">Classe introuvable.</div>;
   }
+
+  const handleSaveName = () => {
+    if (editedName.trim()) {
+      updateClass(cls.id, { name: editedName.trim() });
+    }
+    setIsEditingName(false);
+  };
+
+  const handleDeleteClass = () => {
+    if (window.confirm("Êtes-vous sûr de vouloir supprimer cette classe et toutes ses données ? Cette action est irréversible.")) {
+      deleteClass(cls.id);
+      navigate('/');
+    }
+  };
 
   const handleAddStudent = (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,9 +98,42 @@ export function ClassDetail() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 ease-out">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Classe: {cls.name}</h1>
-        <p className="text-slate-500 mt-1">Gérez les élèves et les cycles de cette classe.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          {isEditingName ? (
+            <div className="flex items-center gap-2">
+              <Input 
+                value={editedName} 
+                onChange={e => setEditedName(e.target.value)} 
+                className="text-2xl font-bold h-12 w-64"
+                autoFocus
+                onKeyDown={e => e.key === 'Enter' && handleSaveName()}
+              />
+              <Button size="icon" onClick={handleSaveName} className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0">
+                <Save className="w-5 h-5" />
+              </Button>
+              <Button size="icon" variant="outline" onClick={() => { setIsEditingName(false); setEditedName(cls.name); }} className="shrink-0">
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 group">
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900">Classe: {cls.name}</h1>
+              <button 
+                onClick={() => setIsEditingName(true)}
+                className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
+                title="Renommer la classe"
+              >
+                <Edit2 className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+          <p className="text-slate-500 mt-1">Gérez les élèves et les cycles de cette classe.</p>
+        </div>
+        <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={handleDeleteClass}>
+          <Trash2 className="w-4 h-4 mr-2" />
+          Supprimer la classe
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

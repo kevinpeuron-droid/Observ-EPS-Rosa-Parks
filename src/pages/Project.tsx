@@ -105,6 +105,52 @@ export function Project() {
            const validated = data.filter((item: any) => item.validated).length;
            aggregates[f.id] = { total: data.length, validated };
         }
+      } else if (f.type === 'performance_log') {
+        const validObs = obs.filter(o => o.data[f.id]);
+        if (validObs.length > 0) {
+           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           const data = latest.data[f.id];
+           let totalDistance = 0;
+           let totalEffort = 0;
+           let rpeSum = 0;
+           data.reps.forEach((rep: any) => {
+             totalDistance += (rep.distance || 0);
+             totalEffort += (rep.effortTime || 0);
+             rpeSum += (rep.rpe || 5);
+           });
+           const avgRpe = data.reps.length > 0 ? (rpeSum / data.reps.length).toFixed(1) : 0;
+           aggregates[f.id] = { 
+             profile: data.profile, 
+             reps: data.reps.length, 
+             totalDistance, 
+             totalEffort,
+             avgRpe 
+           };
+        }
+      } else if (f.type === 'orienteering_log') {
+        const validObs = obs.filter(o => o.data[f.id]);
+        if (validObs.length > 0) {
+           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           aggregates[f.id] = latest.data[f.id];
+        }
+      } else if (f.type === 'artistic_rating') {
+        const validObs = obs.filter(o => o.data[f.id] && o.data[f.id].scores);
+        if (validObs.length > 0) {
+           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           aggregates[f.id] = latest.data[f.id];
+        }
+      } else if (f.type === 'match_stats') {
+        const validObs = obs.filter(o => o.data[f.id]);
+        if (validObs.length > 0) {
+           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           aggregates[f.id] = latest.data[f.id];
+        }
+      } else if (f.type === 'health_fitness_log') {
+        const validObs = obs.filter(o => o.data[f.id]);
+        if (validObs.length > 0) {
+           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           aggregates[f.id] = latest.data[f.id];
+        }
       }
     });
 
@@ -250,6 +296,116 @@ export function Project() {
                                {stats.validated} / {stats.total}
                              </span>
                           </div>
+                        </div>
+                      );
+                    } else if (field.type === 'performance_log' && aggregates[field.id]) {
+                      const stats = aggregates[field.id];
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2 border border-slate-800">
+                          <span className="text-slate-400 font-medium">{field.label} {stats.profile && `(${stats.profile})`}</span>
+                          <div className="flex justify-between items-center mt-2">
+                             <div className="text-sm text-slate-500">Répétitions: <span className="text-emerald-400 font-bold">{stats.reps}</span></div>
+                             <div className="text-sm text-slate-500">RPE Moy: <span className="text-indigo-400 font-bold">{stats.avgRpe}/10</span></div>
+                          </div>
+                          {(stats.totalDistance > 0 || stats.totalEffort > 0) && (
+                            <div className="text-xs text-slate-500 mt-1 flex gap-3">
+                              {stats.totalDistance > 0 && <span>Dist: {stats.totalDistance}m</span>}
+                              {stats.totalEffort > 0 && <span>Effort: {Math.floor(stats.totalEffort / 60)}m {stats.totalEffort % 60}s</span>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    } else if (field.type === 'orienteering_log' && aggregates[field.id]) {
+                      const stats = aggregates[field.id];
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2 border border-slate-800">
+                          <span className="text-slate-400 font-medium">{field.label}</span>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {stats.raceType && <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded font-bold">{stats.raceType}</span>}
+                            {stats.tactic && <span className="px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded font-bold">{stats.tactic}</span>}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 mt-3 text-center">
+                             <div className="bg-slate-900 rounded p-2 border border-emerald-900/50">
+                               <div className="text-[10px] text-slate-500 uppercase font-bold">Balises OK</div>
+                               <div className="text-xl font-bold text-emerald-400">{stats.balisesOk}</div>
+                             </div>
+                             <div className="bg-slate-900 rounded p-2 border border-red-900/50">
+                               <div className="text-[10px] text-slate-500 uppercase font-bold">Erreurs</div>
+                               <div className="text-xl font-bold text-red-400">{stats.errors}</div>
+                             </div>
+                          </div>
+                          <div className="mt-2 text-center flex items-center justify-center">
+                            <span className="text-sm font-mono font-bold text-slate-300">
+                              Chrono: {Math.floor(stats.globalTimeMs / 60000)}m {Math.floor((stats.globalTimeMs / 1000) % 60).toString().padStart(2, '0')}s
+                            </span>
+                            {stats.isRunning && <span className="ml-2 inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>}
+                          </div>
+                        </div>
+                      );
+                    } else if (field.type === 'artistic_rating' && aggregates[field.id]) {
+                      const stats = aggregates[field.id];
+                      const total = Object.values(stats.scores as Record<string, number>).reduce((a, b) => a + b, 0);
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2 border border-slate-800">
+                          <div className="flex justify-between items-center mb-1">
+                             <span className="text-slate-400 font-medium">{field.label}</span>
+                             <span className="text-lg font-bold text-fuchsia-400">{total} <span className="text-sm text-slate-500">/ 16</span></span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                             <div className="flex justify-between text-slate-400"><span>Exécution:</span> <span className="text-white font-bold">{stats.scores.execution || '-'}</span></div>
+                             <div className="flex justify-between text-slate-400"><span>Fluidité:</span> <span className="text-white font-bold">{stats.scores.fluidity || '-'}</span></div>
+                             <div className="flex justify-between text-slate-400"><span>Originalité:</span> <span className="text-white font-bold">{stats.scores.originality || '-'}</span></div>
+                             <div className="flex justify-between text-slate-400"><span>Espace:</span> <span className="text-white font-bold">{stats.scores.space || '-'}</span></div>
+                          </div>
+                        </div>
+                      );
+                    } else if (field.type === 'match_stats' && aggregates[field.id]) {
+                      const stats = aggregates[field.id];
+                      const tSuccess = (stats.passes?.success || 0) + (stats.shots?.success || 0) + (stats.defense?.success || 0);
+                      const tFail = (stats.passes?.fail || 0) + (stats.shots?.fail || 0) + (stats.defense?.fail || 0);
+                      const totalActions = tSuccess + tFail;
+                      const eff = totalActions > 0 ? Math.round((tSuccess / totalActions) * 100) : 0;
+
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2 border border-slate-800">
+                          <div className="flex justify-between items-center mb-1">
+                             <span className="text-slate-400 font-medium">{field.label}</span>
+                             <span className={`text-lg font-bold ${eff >= 50 ? 'text-emerald-400' : 'text-amber-400'}`}>{eff}% <span className="text-xs text-slate-500 font-normal">Eff.</span></span>
+                          </div>
+                          <div className="flex flex-wrap gap-2 mb-1">
+                            {stats.role && <span className="px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded font-bold">{stats.role}</span>}
+                            {stats.zone && <span className="px-2 py-1 bg-indigo-500/20 text-indigo-400 text-xs rounded font-bold">{stats.zone}</span>}
+                          </div>
+                          <div className="flex justify-between text-xs text-slate-400 mt-1">
+                            <span>Total Actions: {totalActions}</span>
+                            <span className="text-emerald-400">{tSuccess} réussies</span>
+                          </div>
+                        </div>
+                      );
+                    } else if (field.type === 'health_fitness_log' && aggregates[field.id]) {
+                      const stats = aggregates[field.id];
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2 border border-slate-800">
+                          <div className="flex justify-between items-center mb-1">
+                             <span className="text-slate-400 font-medium">{field.label}</span>
+                             <span className="text-teal-400 font-bold text-sm">Fatigue: {stats.globalFatigue || 5}/10</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs text-slate-300 bg-slate-900 p-2 rounded">
+                            <div className="flex flex-col items-center">
+                               <span className="text-[10px] text-slate-500 uppercase">BPM Pré</span>
+                               <span className="font-mono font-bold text-teal-300">{stats.preBpm || '-'}</span>
+                            </div>
+                            <div className="w-px h-6 bg-slate-700"></div>
+                            <div className="flex flex-col items-center">
+                               <span className="text-[10px] text-slate-500 uppercase">BPM Post</span>
+                               <span className="font-mono font-bold text-red-400">{stats.postBpm || '-'}</span>
+                            </div>
+                          </div>
+                          {stats.ateliers && stats.ateliers.length > 0 && (
+                            <div className="text-xs text-slate-400 mt-1">
+                              <span className="font-bold text-teal-400">{stats.ateliers.length}</span> ateliers réalisés
+                            </div>
+                          )}
                         </div>
                       );
                     }
