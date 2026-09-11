@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useStore } from '../store';
-import { ChevronLeft, Maximize, Activity } from 'lucide-react';
+import { ChevronLeft, Maximize, Activity, Star } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export function Project() {
@@ -54,7 +54,7 @@ export function Project() {
     sheet.fields.forEach(f => {
       if (f.type === 'counter') {
         aggregates[f.id] = obs.reduce((sum, o) => sum + ((o.data[f.id] as number) || 0), 0);
-      } else if (f.type === 'number' || f.type === 'speed_30s' || f.type === 'distance_speed') {
+      } else if (f.type === 'number' || f.type === 'speed_30s' || f.type === 'distance_speed' || f.type === 'rating') {
         const validObs = obs.filter(o => o.data[f.id] !== undefined && o.data[f.id] !== '');
         if (validObs.length > 0) {
            const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
@@ -213,7 +213,7 @@ export function Project() {
                 
                 <div className="space-y-4 relative z-10">
                   {sheet.fields.map(field => {
-                    if (field.type === 'counter' || field.type === 'number' || field.type === 'speed_30s' || field.type === 'distance_speed') {
+                    if (field.type === 'counter' || field.type === 'number' || field.type === 'speed_30s' || field.type === 'distance_speed' || field.type === 'rating') {
                       const isDistanceSpeed = field.type === 'distance_speed';
                       const hasTargetDuration = field.options?.targetDuration;
                       const val = aggregates[field.id];
@@ -222,9 +222,18 @@ export function Project() {
                         <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2">
                           <div className="flex items-center justify-between">
                              <span className="text-slate-400 font-medium">{field.label}</span>
-                             <span className="text-3xl font-bold font-mono text-emerald-400">
-                               {val !== undefined ? val : '-'}
-                               {(field.type === 'speed_30s' || isDistanceSpeed) && val !== undefined && ' m'}
+                             <span className="text-3xl font-bold font-mono text-emerald-400 flex items-center gap-1">
+                               {field.type === 'rating' ? (
+                                 <span className="flex items-center text-amber-400">
+                                   {val !== undefined ? val : '-'} 
+                                   <Star className="w-6 h-6 ml-1 fill-amber-400" />
+                                 </span>
+                               ) : (
+                                 <>
+                                   {val !== undefined ? val : '-'}
+                                   {(field.type === 'speed_30s' || isDistanceSpeed) && val !== undefined && ' m'}
+                                 </>
+                               )}
                              </span>
                           </div>
                           {field.type === 'speed_30s' && val !== undefined && (

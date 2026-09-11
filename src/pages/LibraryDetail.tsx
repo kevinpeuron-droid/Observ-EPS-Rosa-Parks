@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useStore } from '../store';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
@@ -6,10 +6,11 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { ChevronLeft, Plus, Trash2, Settings, Type } from 'lucide-react';
 import { ObservationFieldType } from '../types';
+import { FIELD_TYPE_LABELS } from '../components/SettingsDialog';
 
 export function LibraryDetail() {
   const { templateId } = useParams<{ templateId: string }>();
-  const { templateActivities, templateSheets, addTemplateSheet, deleteTemplateSheet, addFieldToTemplateSheet, removeFieldFromTemplateSheet } = useStore();
+  const { templateActivities, templateSheets, addTemplateSheet, deleteTemplateSheet, addFieldToTemplateSheet, removeFieldFromTemplateSheet, settings } = useStore();
   
   const template = templateActivities.find(t => t.id === templateId);
   const sheets = templateSheets.filter(ts => ts.templateActivityId === templateId);
@@ -27,6 +28,17 @@ export function LibraryDetail() {
   if (!template) {
     return <div className="p-8 text-center">Modèle introuvable.</div>;
   }
+
+  const allowedFieldTypes = template.ca && settings?.caFieldMapping?.[template.ca] 
+    ? settings.caFieldMapping[template.ca]
+    : Object.keys(FIELD_TYPE_LABELS) as ObservationFieldType[];
+
+  // Update newFieldType if the current one is not allowed
+  useEffect(() => {
+    if (!allowedFieldTypes.includes(newFieldType) && allowedFieldTypes.length > 0) {
+      setNewFieldType(allowedFieldTypes[0]);
+    }
+  }, [allowedFieldTypes, newFieldType]);
 
   const handleAddSheet = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,26 +67,6 @@ export function LibraryDetail() {
     });
     setNewFieldLabel('');
     setNewFieldType('counter');
-  };
-
-  const fieldTypeLabels: Record<ObservationFieldType, string> = {
-    counter: 'Compteur (+/-)',
-    rating: 'Évaluation (Étoiles)',
-    boolean: 'Oui / Non',
-    number: 'Valeur Numérique Libre',
-    speed_30s: 'Vitesse sur 30" (m -> km/h)',
-    distance_speed: 'Distance + Temps cible (Vitesse moyenne)',
-    time_mm_ss: 'Chrono + Temps cible (% Réussite)',
-    orienteering_star: 'Course en étoile (Chrono Balises)',
-    training_log: 'Carnet Musculation (Séries/Reps/Charge)',
-    project_target: 'Projet de performance (Cible vs Réel)',
-    ratio_action: 'Bilan de passes/actions (Réussite / Échec)',
-    sequence_planner: 'Projet d\'enchaînement (Step / Gym)',
-    performance_log: 'Carnet de Perf CA1 (1/2 fond, Allure, RPE)',
-    orienteering_log: 'Carnet de Course d\'Orientation (CA2)',
-    artistic_rating: 'Grille d\'évaluation CA3 (Danse / Gym)',
-    match_stats: 'Statistiques de Match CA4 (Sports Co / Raquettes)',
-    health_fitness_log: 'Carnet Santé & Entretien CA5 (BPM, Ateliers, Fatigue)'
   };
 
   return (
@@ -188,8 +180,8 @@ export function LibraryDetail() {
                         value={newFieldType}
                         onChange={e => setNewFieldType(e.target.value as ObservationFieldType)}
                       >
-                        {Object.entries(fieldTypeLabels).map(([key, label]) => (
-                          <option key={key} value={key}>{label}</option>
+                        {allowedFieldTypes.map((key) => (
+                          <option key={key} value={key}>{FIELD_TYPE_LABELS[key]}</option>
                         ))}
                       </select>
                     </div>
@@ -254,7 +246,7 @@ export function LibraryDetail() {
                           </div>
                           <div>
                             <div className="font-medium text-slate-800">{field.label}</div>
-                            <div className="text-xs text-slate-500">{fieldTypeLabels[field.type]}</div>
+                            <div className="text-xs text-slate-500">{FIELD_TYPE_LABELS[field.type]}</div>
                           </div>
                         </div>
                         <Button 

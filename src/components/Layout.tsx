@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Activity, LayoutDashboard, ChevronLeft, Download, Library as LibraryIcon } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { SettingsDialog } from './SettingsDialog';
 
 export function Layout() {
   const location = useLocation();
@@ -59,6 +60,8 @@ export function Layout() {
               <Download className="w-4 h-4" />
               Importer
             </Link>
+            <div className="w-px h-4 bg-slate-200 mx-2"></div>
+            <SettingsDialog />
           </nav>
         </div>
       </header>

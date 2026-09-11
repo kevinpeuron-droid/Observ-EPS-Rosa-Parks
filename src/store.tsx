@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Activity, ClassGroup, ObservationRecord, ObservationSheet, Session, TemplateActivity, TemplateSheet, ObservationField } from './types';
+import { Activity, ClassGroup, ObservationRecord, ObservationSheet, Session, TemplateActivity, TemplateSheet, ObservationField, AppSettings, ObservationFieldType } from './types';
 import { db } from './lib/firebase';
 import { doc, collection, onSnapshot, setDoc, addDoc, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 
@@ -11,7 +11,16 @@ interface StoreState {
   observations: ObservationRecord[];
   templateActivities: TemplateActivity[];
   templateSheets: TemplateSheet[];
+  settings?: AppSettings;
 }
+
+const DEFAULT_CA_MAPPING: Record<number, ObservationFieldType[]> = {
+  1: ['counter', 'rating', 'boolean', 'number', 'speed_30s', 'distance_speed', 'time_mm_ss', 'project_target', 'performance_log'],
+  2: ['counter', 'rating', 'boolean', 'number', 'time_mm_ss', 'orienteering_star', 'orienteering_log'],
+  3: ['counter', 'rating', 'boolean', 'number', 'sequence_planner', 'artistic_rating'],
+  4: ['counter', 'rating', 'boolean', 'number', 'ratio_action', 'match_stats'],
+  5: ['counter', 'rating', 'boolean', 'number', 'training_log', 'health_fitness_log']
+};
 
 const initialState: StoreState = {
   classes: [],
@@ -20,7 +29,8 @@ const initialState: StoreState = {
   sheets: [],
   observations: [],
   templateActivities: [],
-  templateSheets: []
+  templateSheets: [],
+  settings: { caFieldMapping: DEFAULT_CA_MAPPING }
 };
 
 interface StoreContextType extends StoreState {
@@ -53,6 +63,7 @@ interface StoreContextType extends StoreState {
   removeFieldFromTemplateSheet: (sheetId: string, fieldId: string) => void;
   
   addActivityFromTemplate: (classId: string, templateId: string) => void;
+  updateSettings: (settings: Partial<AppSettings>) => void;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -336,12 +347,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const updateSettings = (newSettings: Partial<AppSettings>) => {
+    updateWorkspace(s => ({
+      settings: { ...s.settings, ...newSettings } as AppSettings
+    }));
+  };
+
   if (!loaded) {
     return <div className="h-screen w-full flex items-center justify-center text-slate-500 font-medium">Chargement des données en temps réel...</div>;
   }
 
   const value = {
     ...state,
+    updateSettings,
     addClass, updateClass, deleteClass, bulkImportClasses, mergeClasses,
     addActivity, updateActivity, deleteActivity,
     addSession, updateSession, deleteSession,

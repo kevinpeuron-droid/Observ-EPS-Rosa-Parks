@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore } from '../store';
 import { Button } from '../components/ui/Button';
-import { CheckCircle2, Minus, Plus } from 'lucide-react';
+import { CheckCircle2, Minus, Plus, Star } from 'lucide-react';
 import { OrienteeringStar } from '../components/OrienteeringStar';
 import { TrainingLog } from '../components/TrainingLog';
 import { RatioAction } from '../components/RatioAction';
@@ -277,6 +277,34 @@ export function Observe() {
                       >
                         {studentData[field.id] ? 'OUI' : 'NON'}
                       </button>
+                    )}
+
+                    {field.type === 'rating' && (
+                      <div className="flex items-center justify-center gap-2 h-16 bg-slate-100 rounded-xl">
+                        {[1, 2, 3, 4, 5].map(star => (
+                          <button
+                            key={star}
+                            onClick={() => {
+                              setData(prev => {
+                                const targetData = prev[targetId] || {};
+                                return {
+                                  ...prev,
+                                  [targetId]: { ...targetData, [field.id]: star }
+                                };
+                              });
+                            }}
+                            className="p-2 transition-transform hover:scale-110 focus:outline-none"
+                          >
+                            <Star 
+                              className={`w-10 h-10 ${
+                                (studentData[field.id] as number || 0) >= star
+                                  ? 'fill-amber-400 text-amber-400' 
+                                  : 'fill-transparent text-slate-300'
+                              }`} 
+                            />
+                          </button>
+                        ))}
+                      </div>
                     )}
 
                     {field.type === 'number' && (

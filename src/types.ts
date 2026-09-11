@@ -70,3 +70,7 @@ export type ObservationRecord = {
   data: Record<string, any>; // fieldId -> value
   timestamp: number;
 };
+
+export type AppSettings = {
+  caFieldMapping: Record<number, ObservationFieldType[]>;
+};
