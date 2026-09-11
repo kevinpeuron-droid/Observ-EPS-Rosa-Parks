@@ -58,6 +58,7 @@ export function LibraryDetail() {
     boolean: 'Oui / Non',
     number: 'Valeur Numérique Libre',
     speed_30s: 'Vitesse sur 30" (m -> km/h)',
+    time_mm_ss: 'Chrono (mm:ss)',
     orienteering_star: 'Course en étoile (Chrono Balises)',
     training_log: 'Carnet Musculation (Séries/Reps/Charge)',
     project_target: 'Projet de performance (Cible vs Réel)',

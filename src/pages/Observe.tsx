@@ -13,6 +13,7 @@ import { OrienteeringLog } from '../components/OrienteeringLog';
 import { ArtisticRating } from '../components/ArtisticRating';
 import { MatchStats } from '../components/MatchStats';
 import { HealthFitnessLog } from '../components/HealthFitnessLog';
+import { TimeMmSs } from '../components/TimeMmSs';
 
 export function Observe() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -308,6 +309,21 @@ export function Observe() {
                           </div>
                         )}
                       </div>
+                    )}
+
+                    {field.type === 'time_mm_ss' && (
+                      <TimeMmSs 
+                        value={studentData[field.id]}
+                        onChange={(newVal) => {
+                          setData(prev => {
+                            const targetData = prev[targetId] || {};
+                            return {
+                              ...prev,
+                              [targetId]: { ...targetData, [field.id]: newVal }
+                            };
+                          });
+                        }}
+                      />
                     )}
 
                     {field.type === 'orienteering_star' && (

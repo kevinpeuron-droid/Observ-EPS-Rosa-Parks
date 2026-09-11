@@ -60,6 +60,12 @@ export function Project() {
            const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
            aggregates[f.id] = latest.data[f.id] as number;
         }
+      } else if (f.type === 'time_mm_ss') {
+        const validObs = obs.filter(o => o.data[f.id] !== undefined);
+        if (validObs.length > 0) {
+           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           aggregates[f.id] = latest.data[f.id];
+        }
       } else if (f.type === 'orienteering_star') {
         const validObs = obs.filter(o => o.data[f.id]);
         if (validObs.length > 0) {
@@ -222,6 +228,20 @@ export function Project() {
                                {((aggregates[field.id] as number) * 0.12).toFixed(1)} km/h
                              </div>
                           )}
+                        </div>
+                      );
+                    } else if (field.type === 'time_mm_ss' && aggregates[field.id]) {
+                      const time = aggregates[field.id];
+                      const m = time.minutes || 0;
+                      const s = time.seconds || 0;
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2">
+                          <div className="flex items-center justify-between">
+                             <span className="text-slate-400 font-medium">{field.label}</span>
+                             <span className="text-3xl font-bold font-mono text-emerald-400">
+                               {m}:{s < 10 ? `0${s}` : s}
+                             </span>
+                          </div>
                         </div>
                       );
                     } else if (field.type === 'orienteering_star' && aggregates[field.id]) {
