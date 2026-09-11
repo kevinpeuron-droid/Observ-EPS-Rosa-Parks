@@ -54,7 +54,7 @@ export function Project() {
     sheet.fields.forEach(f => {
       if (f.type === 'counter') {
         aggregates[f.id] = obs.reduce((sum, o) => sum + ((o.data[f.id] as number) || 0), 0);
-      } else if (f.type === 'number' || f.type === 'speed_30s') {
+      } else if (f.type === 'number' || f.type === 'speed_30s' || f.type === 'distance_speed') {
         const validObs = obs.filter(o => o.data[f.id] !== undefined && o.data[f.id] !== '');
         if (validObs.length > 0) {
            const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
@@ -213,19 +213,28 @@ export function Project() {
                 
                 <div className="space-y-4 relative z-10">
                   {sheet.fields.map(field => {
-                    if (field.type === 'counter' || field.type === 'number' || field.type === 'speed_30s') {
+                    if (field.type === 'counter' || field.type === 'number' || field.type === 'speed_30s' || field.type === 'distance_speed') {
+                      const isDistanceSpeed = field.type === 'distance_speed';
+                      const hasTargetDuration = field.options?.targetDuration;
+                      const val = aggregates[field.id];
+                      
                       return (
                         <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2">
                           <div className="flex items-center justify-between">
                              <span className="text-slate-400 font-medium">{field.label}</span>
                              <span className="text-3xl font-bold font-mono text-emerald-400">
-                               {aggregates[field.id] !== undefined ? aggregates[field.id] : '-'}
-                               {field.type === 'speed_30s' && aggregates[field.id] !== undefined && ' m'}
+                               {val !== undefined ? val : '-'}
+                               {(field.type === 'speed_30s' || isDistanceSpeed) && val !== undefined && ' m'}
                              </span>
                           </div>
-                          {field.type === 'speed_30s' && aggregates[field.id] !== undefined && (
+                          {field.type === 'speed_30s' && val !== undefined && (
                              <div className="text-right text-sm text-emerald-500/80 font-bold">
-                               {((aggregates[field.id] as number) * 0.12).toFixed(1)} km/h
+                               {((val as number) * 0.12).toFixed(1)} km/h
+                             </div>
+                          )}
+                          {isDistanceSpeed && val !== undefined && hasTargetDuration && (
+                             <div className="text-right text-sm text-emerald-500/80 font-bold">
+                               {(((val as number) / field.options!.targetDuration) * 3.6).toFixed(1)} km/h
                              </div>
                           )}
                         </div>
@@ -234,13 +243,24 @@ export function Project() {
                       const time = aggregates[field.id];
                       const m = time.minutes || 0;
                       const s = time.seconds || 0;
+                      const currentSeconds = m * 60 + s;
+                      const targetSeconds = field.options?.targetDuration;
+                      const percent = targetSeconds ? Math.round((currentSeconds / targetSeconds) * 100) : null;
+                      
                       return (
                         <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2">
                           <div className="flex items-center justify-between">
                              <span className="text-slate-400 font-medium">{field.label}</span>
-                             <span className="text-3xl font-bold font-mono text-emerald-400">
-                               {m}:{s < 10 ? `0${s}` : s}
-                             </span>
+                             <div className="flex flex-col items-end">
+                               <span className="text-3xl font-bold font-mono text-emerald-400">
+                                 {m}:{s < 10 ? `0${s}` : s}
+                               </span>
+                               {percent !== null && currentSeconds > 0 && (
+                                 <span className="text-sm text-indigo-400 font-bold mt-1">
+                                   Perf : {percent}%
+                                 </span>
+                               )}
+                             </div>
                           </div>
                         </div>
                       );

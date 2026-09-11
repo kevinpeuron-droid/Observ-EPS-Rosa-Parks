@@ -21,6 +21,8 @@ export function LibraryDetail() {
   const [newFieldLabel, setNewFieldLabel] = useState('');
   const [newFieldType, setNewFieldType] = useState<ObservationFieldType>('counter');
   const [newFieldBaliseCount, setNewFieldBaliseCount] = useState<number>(10);
+  const [newFieldTargetMinutes, setNewFieldTargetMinutes] = useState<number>(5);
+  const [newFieldTargetSeconds, setNewFieldTargetSeconds] = useState<number>(0);
 
   if (!template) {
     return <div className="p-8 text-center">Modèle introuvable.</div>;
@@ -42,6 +44,9 @@ export function LibraryDetail() {
     if (newFieldType === 'orienteering_star') {
       options.baliseCount = newFieldBaliseCount;
     }
+    if (newFieldType === 'time_mm_ss' || newFieldType === 'distance_speed') {
+      options.targetDuration = (newFieldTargetMinutes * 60) + newFieldTargetSeconds;
+    }
 
     addFieldToTemplateSheet(activeSheetId, { 
       label: newFieldLabel.trim(), 
@@ -58,7 +63,8 @@ export function LibraryDetail() {
     boolean: 'Oui / Non',
     number: 'Valeur Numérique Libre',
     speed_30s: 'Vitesse sur 30" (m -> km/h)',
-    time_mm_ss: 'Chrono (mm:ss)',
+    distance_speed: 'Distance + Temps cible (Vitesse moyenne)',
+    time_mm_ss: 'Chrono + Temps cible (% Réussite)',
     orienteering_star: 'Course en étoile (Chrono Balises)',
     training_log: 'Carnet Musculation (Séries/Reps/Charge)',
     project_target: 'Projet de performance (Cible vs Réel)',
@@ -199,6 +205,36 @@ export function LibraryDetail() {
                         onChange={e => setNewFieldBaliseCount(parseInt(e.target.value) || 10)}
                         className="bg-white"
                       />
+                    </div>
+                  )}
+
+                  {(newFieldType === 'time_mm_ss' || newFieldType === 'distance_speed') && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-700">Temps de référence (Cible)</label>
+                      <div className="flex items-center gap-2">
+                        <Input 
+                          type="number"
+                          min={0}
+                          value={newFieldTargetMinutes}
+                          onChange={e => setNewFieldTargetMinutes(parseInt(e.target.value) || 0)}
+                          className="bg-white w-24"
+                          placeholder="Min"
+                        />
+                        <span className="text-slate-500 font-medium">min</span>
+                        <Input 
+                          type="number"
+                          min={0}
+                          max={59}
+                          value={newFieldTargetSeconds}
+                          onChange={e => setNewFieldTargetSeconds(parseInt(e.target.value) || 0)}
+                          className="bg-white w-24"
+                          placeholder="Sec"
+                        />
+                        <span className="text-slate-500 font-medium">sec</span>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Sert à calculer {newFieldType === 'time_mm_ss' ? 'le % de temps réalisé' : 'la vitesse moyenne'}.
+                      </p>
                     </div>
                   )}
 

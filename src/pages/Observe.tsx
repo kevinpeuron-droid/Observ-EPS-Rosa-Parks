@@ -311,20 +311,54 @@ export function Observe() {
                       </div>
                     )}
 
-                    {field.type === 'time_mm_ss' && (
-                      <TimeMmSs 
-                        value={studentData[field.id]}
-                        onChange={(newVal) => {
-                          setData(prev => {
-                            const targetData = prev[targetId] || {};
-                            return {
-                              ...prev,
-                              [targetId]: { ...targetData, [field.id]: newVal }
-                            };
-                          });
-                        }}
-                      />
+                    {field.type === 'distance_speed' && (
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="w-full relative">
+                          <input 
+                            type="number"
+                            className="w-full h-16 text-center text-3xl font-bold font-mono rounded-xl border-2 border-slate-200 focus:border-blue-600 focus:outline-none pr-12"
+                            placeholder="Distance (m)"
+                            value={studentData[field.id] === undefined ? '' : studentData[field.id] as number}
+                            onChange={(e) => handleNumberChange(targetId, field.id, e.target.value)}
+                          />
+                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">m</span>
+                        </div>
+                        {studentData[field.id] !== undefined && studentData[field.id] !== '' && field.options?.targetDuration && (
+                          <div className="bg-emerald-100 text-emerald-800 px-4 py-2 rounded-lg font-bold w-full text-center text-lg">
+                            Vitesse : {(((studentData[field.id] as number) / field.options.targetDuration) * 3.6).toFixed(1)} km/h
+                          </div>
+                        )}
+                      </div>
                     )}
+
+                    {field.type === 'time_mm_ss' && (() => {
+                      const timeVal = studentData[field.id];
+                      const currentSeconds = timeVal ? (timeVal.minutes || 0) * 60 + (timeVal.seconds || 0) : 0;
+                      const targetSeconds = field.options?.targetDuration;
+                      const percent = targetSeconds ? Math.round((currentSeconds / targetSeconds) * 100) : null;
+                      
+                      return (
+                        <div className="flex flex-col gap-2">
+                          <TimeMmSs 
+                            value={timeVal}
+                            onChange={(newVal) => {
+                              setData(prev => {
+                                const targetData = prev[targetId] || {};
+                                return {
+                                  ...prev,
+                                  [targetId]: { ...targetData, [field.id]: newVal }
+                                };
+                              });
+                            }}
+                          />
+                          {percent !== null && currentSeconds > 0 && (
+                            <div className="bg-indigo-100 text-indigo-800 px-4 py-2 rounded-lg font-bold w-full text-center text-lg mt-2">
+                              Temps effectif : {percent}%
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {field.type === 'orienteering_star' && (
                       <OrienteeringStar 
