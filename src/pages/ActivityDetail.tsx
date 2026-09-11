@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Calendar, ChevronRight, FileText } from 'lucide-react';
+import { Calendar, ChevronRight, FileText, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 export function ActivityDetail() {
   const { activityId } = useParams<{ activityId: string }>();
-  const { activities, sessions, sheets, addSession } = useStore();
+  const navigate = useNavigate();
+  const { activities, sessions, sheets, addSession, deleteSession } = useStore();
   
   const activity = activities.find(a => a.id === activityId);
   const actSessions = sessions.filter(s => s.activityId === activityId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -73,19 +74,31 @@ export function ActivityDetail() {
 
           <div className="grid gap-4">
             {actSessions.map(session => (
-              <Link key={session.id} to={`/session/${session.id}`}>
-                <Card className="hover:border-blue-300 transition-colors group">
-                  <CardContent className="p-4 sm:p-6 flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-lg group-hover:text-blue-600 transition-colors">{session.name}</h3>
-                      <p className="text-sm text-slate-500 capitalize">
-                        {format(new Date(session.date), 'EEEE d MMMM yyyy', { locale: fr })}
-                      </p>
-                    </div>
+              <Card key={session.id} className="hover:border-blue-300 transition-colors group cursor-pointer" onClick={() => navigate(`/session/${session.id}`)}>
+                <CardContent className="p-4 sm:p-6 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-lg group-hover:text-blue-600 transition-colors">{session.name}</h3>
+                    <p className="text-sm text-slate-500 capitalize">
+                      {format(new Date(session.date), 'EEEE d MMMM yyyy', { locale: fr })}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm("Voulez-vous vraiment supprimer cette séance et toutes ses observations ?")) {
+                          deleteSession(session.id);
+                        }
+                      }} 
+                      className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                      title="Supprimer la séance"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
                     <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-blue-600" />
-                  </CardContent>
-                </Card>
-              </Link>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
             {actSessions.length === 0 && (
               <div className="text-center p-12 border border-dashed rounded-xl text-slate-500 bg-slate-50">

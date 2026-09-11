@@ -28,7 +28,8 @@ interface StoreContextType extends StoreState {
   updateClass: (id: string, cls: Partial<ClassGroup>) => void;
   deleteClass: (id: string) => void;
   bulkImportClasses: (importData: { className: string, students: { name: string }[] }[]) => void;
-  
+  mergeClasses: (targetId: string, sourceId: string) => void;
+
   addActivity: (act: Omit<Activity, 'id'>) => void;
   updateActivity: (id: string, act: Partial<Activity>) => void;
   deleteActivity: (id: string) => void;
@@ -212,6 +213,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const mergeClasses = (targetId: string, sourceId: string) => {
+    updateWorkspace(s => {
+      const targetClass = s.classes.find(c => c.id === targetId);
+      const sourceClass = s.classes.find(c => c.id === sourceId);
+      if (!targetClass || !sourceClass) return s;
+
+      const mergedStudents = [...targetClass.students, ...sourceClass.students];
+      const mergedTeams = [...(targetClass.teams || []), ...(sourceClass.teams || [])];
+
+      const newClasses = s.classes
+        .map(c => c.id === targetId ? { ...c, students: mergedStudents, teams: mergedTeams } : c)
+        .filter(c => c.id !== sourceId);
+
+      const newActivities = s.activities.map(a => a.classId === sourceId ? { ...a, classId: targetId } : a);
+
+      return {
+        ...s,
+        classes: newClasses,
+        activities: newActivities
+      };
+    });
+  };
+
   const addActivity = (act: Omit<Activity, 'id'>) => updateWorkspace(s => ({ activities: [...s.activities, { ...act, id: generateId() }] }));
   const updateActivity = (id: string, act: Partial<Activity>) => updateWorkspace(s => ({ activities: s.activities.map(a => (a.id === id ? { ...a, ...act } : a)) }));
   const deleteActivity = (id: string) => updateWorkspace(s => ({ activities: s.activities.filter(a => a.id !== id) }));
@@ -318,7 +342,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const value = {
     ...state,
-    addClass, updateClass, deleteClass, bulkImportClasses,
+    addClass, updateClass, deleteClass, bulkImportClasses, mergeClasses,
     addActivity, updateActivity, deleteActivity,
     addSession, updateSession, deleteSession,
     addSheet, updateSheet, deleteSheet,

@@ -9,14 +9,16 @@ import { Activity, Plus, ChevronRight, UserPlus, Trash2, Eye, Edit2, Save, X } f
 export function ClassDetail() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
-  const { classes, activities, updateClass, deleteClass, templateActivities, addActivityFromTemplate } = useStore();
+  const { classes, activities, updateClass, deleteClass, templateActivities, addActivityFromTemplate, mergeClasses } = useStore();
   
   const cls = classes.find(c => c.id === classId);
   const classActivities = activities.filter(a => a.classId === classId);
+  const otherClasses = classes.filter(c => c.id !== classId);
 
   const [newStudentName, setNewStudentName] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [newTeamName, setNewTeamName] = useState('');
+  const [selectedMergeClassId, setSelectedMergeClassId] = useState('');
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
@@ -40,6 +42,16 @@ export function ClassDetail() {
     if (window.confirm("Êtes-vous sûr de vouloir supprimer cette classe et toutes ses données ? Cette action est irréversible.")) {
       deleteClass(cls.id);
       navigate('/');
+    }
+  };
+
+  const handleMergeClass = () => {
+    if (!selectedMergeClassId) return;
+    const targetClass = classes.find(c => c.id === selectedMergeClassId);
+    if (!targetClass) return;
+    if (window.confirm(`Êtes-vous sûr de vouloir fusionner cette classe dans "${targetClass.name}" ?\n\nTous les élèves, équipes et activités seront transférés, puis cette classe sera supprimée.`)) {
+      mergeClasses(targetClass.id, cls.id);
+      navigate(`/class/${targetClass.id}`);
     }
   };
 
@@ -130,10 +142,29 @@ export function ClassDetail() {
           )}
           <p className="text-slate-500 mt-1">Gérez les élèves et les cycles de cette classe.</p>
         </div>
-        <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={handleDeleteClass}>
-          <Trash2 className="w-4 h-4 mr-2" />
-          Supprimer la classe
-        </Button>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          {otherClasses.length > 0 && (
+            <div className="flex items-center gap-2">
+              <select 
+                className="h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                value={selectedMergeClassId}
+                onChange={e => setSelectedMergeClassId(e.target.value)}
+              >
+                <option value="">Fusionner avec...</option>
+                {otherClasses.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <Button variant="outline" disabled={!selectedMergeClassId} onClick={handleMergeClass}>
+                Fusionner
+              </Button>
+            </div>
+          )}
+          <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={handleDeleteClass}>
+            <Trash2 className="w-4 h-4 mr-2" />
+            Supprimer
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
