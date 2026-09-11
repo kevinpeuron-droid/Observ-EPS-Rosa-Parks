@@ -18,7 +18,20 @@ export function ActivityDetail() {
 
   const [newSessionName, setNewSessionName] = useState('');
 
-  if (!activity) return <div className="p-8 text-center">Activité introuvable.</div>;
+  if (!activity) {
+    return (
+      <div className="p-8 text-center flex flex-col items-center">
+        <div className="text-xl font-bold mb-2">Activité introuvable.</div>
+        <div className="text-sm text-slate-500 max-w-md text-left bg-slate-100 p-4 rounded mt-4">
+          <p>ID recherché: {activityId}</p>
+          <p>Activités disponibles: {activities.length}</p>
+          <ul className="list-disc pl-4 mt-2">
+            {activities.map(a => <li key={a.id}>{a.name} ({a.id})</li>)}
+          </ul>
+        </div>
+      </div>
+    );
+  }
 
   const handleAddSession = (e: React.FormEvent) => {
     e.preventDefault();

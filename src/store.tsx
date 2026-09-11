@@ -173,11 +173,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateWorkspace = async (updater: (s: StoreState) => Partial<StoreState>) => {
-    const changes = updater(state);
     const workspaceRef = doc(db, 'workspaces', 'default');
-    setState(s => ({ ...s, ...changes }));
-    await setDoc(workspaceRef, changes, { merge: true }).catch(err => {
-      console.error("Erreur lors de la mise à jour (Permissions ?) :", err);
+    
+    setState(prevState => {
+      const changes = updater(prevState);
+      // We must fire the setDoc asynchronously but use the EXACT changes computed from the freshest state
+      setDoc(workspaceRef, changes, { merge: true }).catch(err => {
+        console.error("Erreur lors de la mise à jour (Permissions ?) :", err);
+      });
+      return { ...prevState, ...changes };
     });
   };
 
