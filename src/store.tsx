@@ -175,13 +175,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateWorkspace = async (updater: (s: StoreState) => Partial<StoreState>) => {
     const workspaceRef = doc(db, 'workspaces', 'default');
     
-    setState(prevState => {
-      const changes = updater(prevState);
-      // We must fire the setDoc asynchronously but use the EXACT changes computed from the freshest state
-      setDoc(workspaceRef, changes, { merge: true }).catch(err => {
-        console.error("Erreur lors de la mise à jour (Permissions ?) :", err);
-      });
-      return { ...prevState, ...changes };
+    // We compute the changes using the current state in the closure. 
+    // This is safe because updateWorkspace is recreated on every render with the freshest state.
+    const changes = updater(state);
+    
+    // Update local state immediately
+    setState(s => ({ ...s, ...changes }));
+    
+    // Sync with Firestore
+    setDoc(workspaceRef, changes, { merge: true }).catch(err => {
+      console.error("Erreur lors de la mise à jour (Permissions ?) :", err);
     });
   };
 
@@ -267,7 +270,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updateWorkspace(s => ({
       templateSheets: s.templateSheets.map(ts => {
         if (ts.id === sheetId) {
-          return { ...ts, fields: [...ts.fields, { ...field, id: generateId() }] };
+          return { ...ts, fields: [...(ts.fields || []), { ...field, id: generateId() }] };
         }
         return ts;
       })
@@ -278,7 +281,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updateWorkspace(s => ({
       templateSheets: s.templateSheets.map(ts => {
         if (ts.id === sheetId) {
-          return { ...ts, fields: ts.fields.filter(f => f.id !== fieldId) };
+          return { ...ts, fields: (ts.fields || []).filter(f => f.id !== fieldId) };
         }
         return ts;
       })
@@ -289,6 +292,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updateWorkspace(s => {
       const template = s.templateActivities.find(t => t.id === templateId);
       if (!template) return {};
+
       const newActivityId = generateId();
       const newActivity = { id: newActivityId, classId, name: template.name };
       
@@ -297,13 +301,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         id: generateId(),
         activityId: newActivityId,
         name: ts.name,
-        isMultiStudent: ts.isMultiStudent,
-        fields: ts.fields.map(f => ({ ...f, id: generateId() }))
+        isMultiStudent: ts.isMultiStudent || false,
+        fields: (ts.fields || []).map(f => ({ ...f, id: generateId() }))
       }));
 
       return {
-        activities: [...s.activities, newActivity],
-        sheets: [...s.sheets, ...newSheets]
+        activities: [...(s.activities || []), newActivity],
+        sheets: [...(s.sheets || []), ...newSheets]
       };
     });
   };
