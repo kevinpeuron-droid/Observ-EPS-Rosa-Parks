@@ -13,6 +13,7 @@ import { SessionDetail } from './pages/SessionDetail';
 import { Observe } from './pages/Observe';
 import { Project } from './pages/Project';
 import { StudentDetail } from './pages/StudentDetail';
+import { ClassSynthesis } from './pages/ClassSynthesis';
 import { Import } from './pages/Import';
 import { Library } from './pages/Library';
 import { LibraryDetail } from './pages/LibraryDetail';
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<Home />} />
             <Route path="class/:classId" element={<ClassDetail />} />
+            <Route path="class/:classId/synthesis" element={<ClassSynthesis />} />
             <Route path="activity/:activityId" element={<ActivityDetail />} />
             <Route path="session/:sessionId" element={<SessionDetail />} />
             <Route path="student/:studentId/class/:classId" element={<StudentDetail />} />

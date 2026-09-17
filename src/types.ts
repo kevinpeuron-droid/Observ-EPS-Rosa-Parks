@@ -16,10 +16,18 @@ export type ClassGroup = {
   teams?: Team[];
 };
 
+export type EvaluationCriterion = {
+  id: string;
+  label: string;
+  maxScore: number;
+  weight: number;
+};
+
 export type TemplateActivity = {
   id: string;
   name: string;
   ca?: 1 | 2 | 3 | 4 | 5;
+  evaluationCriteria?: EvaluationCriterion[];
 };
 
 export type TemplateSheet = {
@@ -30,7 +38,7 @@ export type TemplateSheet = {
   isMultiStudent?: boolean;
 };
 
-export type ObservationFieldType = 'counter' | 'rating' | 'boolean' | 'number' | 'speed_30s' | 'time_mm_ss' | 'distance_speed' | 'orienteering_star' | 'training_log' | 'project_target' | 'ratio_action' | 'sequence_planner' | 'performance_log' | 'orienteering_log' | 'artistic_rating' | 'match_stats' | 'health_fitness_log';
+export type ObservationFieldType = 'counter' | 'rating' | 'boolean' | 'number' | 'speed_30s' | 'time_mm_ss' | 'distance_speed' | 'orienteering_star' | 'training_log' | 'project_target' | 'ratio_action' | 'sequence_planner' | 'performance_log' | 'orienteering_log' | 'artistic_rating' | 'match_stats' | 'health_fitness_log' | 'calculated_target';
 
 export type ObservationField = {
   id: string;
@@ -60,6 +68,8 @@ export type Activity = {
   id: string;
   classId: string;
   name: string;
+  evaluationCriteria?: EvaluationCriterion[];
+  grades?: Record<string, Record<string, number>>; // studentId -> criterionId -> score
 };
 
 export type ObservationRecord = {
@@ -68,6 +78,8 @@ export type ObservationRecord = {
   observerId?: string;
   targetId: string; // Student id or Team id
   data: Record<string, any>; // fieldId -> value
+  bilan?: string;
+  perspectives?: string;
   timestamp: number;
 };
 

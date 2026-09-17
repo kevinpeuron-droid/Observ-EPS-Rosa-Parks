@@ -330,6 +330,29 @@ export function StudentDetail() {
                           );
                         })}
                       </div>
+
+                      {/* Display Bilan & Perspectives for this session if they exist */}
+                      {sObs.some(o => o.bilan || o.perspectives) && (
+                        <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {sObs.filter(o => o.bilan || o.perspectives).map((o, idx) => (
+                            <React.Fragment key={o.id}>
+                              {o.bilan && (
+                                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Bilan</div>
+                                  <div className="text-sm text-slate-700 whitespace-pre-wrap">{o.bilan}</div>
+                                </div>
+                              )}
+                              {o.perspectives && (
+                                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Perspectives</div>
+                                  <div className="text-sm text-slate-700 whitespace-pre-wrap">{o.perspectives}</div>
+                                </div>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      )}
+
                     </div>
                   );
                 })}

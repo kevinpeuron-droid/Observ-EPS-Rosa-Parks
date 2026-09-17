@@ -7,6 +7,7 @@ import { Input } from '../components/ui/Input';
 import { Calendar, ChevronRight, FileText, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { EvaluationConfigDialog } from '../components/EvaluationConfigDialog';
 
 export function ActivityDetail() {
   const { activityId } = useParams<{ activityId: string }>();
@@ -48,9 +49,12 @@ export function ActivityDetail() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 ease-out">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">{activity.name}</h1>
-        <p className="text-slate-500 mt-1">Gestion des séances pour cette classe.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">{activity.name}</h1>
+          <p className="text-slate-500 mt-1">Gestion des séances pour cette classe.</p>
+        </div>
+        <EvaluationConfigDialog activityId={activity.id} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

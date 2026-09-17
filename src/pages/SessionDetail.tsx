@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { QrCode, MonitorPlay, Save, CheckCircle2 } from 'lucide-react';
+import { QrCode, MonitorPlay, Save, CheckCircle2, Trash2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 export function SessionDetail() {
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { sessions, sheets, updateSession } = useStore();
+  const navigate = useNavigate();
+  const { sessions, sheets, updateSession, deleteSession } = useStore();
   
   const session = sessions.find(s => s.id === sessionId);
   const sessionSheets = sheets.filter(s => s.activityId === session?.activityId);
@@ -36,6 +37,13 @@ export function SessionDetail() {
 
   const observeUrl = `${window.location.origin}/#/observe/${session.id}`;
 
+  const handleDeleteSession = () => {
+    if (window.confirm("Voulez-vous vraiment supprimer cette séance et toutes ses observations ? Cette action est irréversible.")) {
+      deleteSession(session.id);
+      navigate(`/activity/${session.activityId}`);
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 ease-out">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -43,12 +51,24 @@ export function SessionDetail() {
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">{session.name}</h1>
           <p className="text-slate-500 mt-1">Gérez le déroulement et le bilan de la séance.</p>
         </div>
-        <Link to={`/project/${session.id}`}>
-          <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg w-full sm:w-auto">
-            <MonitorPlay className="w-5 h-5 mr-2" />
-            Lancer la Projection
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button 
+            variant="outline" 
+            size="lg" 
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 shrink-0"
+            onClick={handleDeleteSession}
+            title="Supprimer la séance"
+          >
+            <Trash2 className="w-5 h-5 sm:mr-2" />
+            <span className="hidden sm:inline">Supprimer</span>
           </Button>
-        </Link>
+          <Link to={`/project/${session.id}`} className="flex-1 sm:flex-none">
+            <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg w-full">
+              <MonitorPlay className="w-5 h-5 mr-2" />
+              Lancer la Projection
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

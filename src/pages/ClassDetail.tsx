@@ -143,6 +143,12 @@ export function ClassDetail() {
           <p className="text-slate-500 mt-1">Gérez les élèves et les cycles de cette classe.</p>
         </div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <Link to={`/class/${classId}/synthesis`}>
+            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto">
+              <Eye className="w-4 h-4 mr-2" />
+              Synthèse Classe
+            </Button>
+          </Link>
           {otherClasses.length > 0 && (
             <div className="flex items-center gap-2">
               <select 

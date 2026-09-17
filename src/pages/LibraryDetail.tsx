@@ -24,6 +24,9 @@ export function LibraryDetail() {
   const [newFieldBaliseCount, setNewFieldBaliseCount] = useState<number>(10);
   const [newFieldTargetMinutes, setNewFieldTargetMinutes] = useState<number>(5);
   const [newFieldTargetSeconds, setNewFieldTargetSeconds] = useState<number>(0);
+  const [newFieldSourceId, setNewFieldSourceId] = useState<string>('');
+  const [newFieldMultiplier, setNewFieldMultiplier] = useState<number>(100);
+  const [newFieldOffset, setNewFieldOffset] = useState<number>(0);
 
   if (!template) {
     return <div className="p-8 text-center">Modèle introuvable.</div>;
@@ -59,6 +62,11 @@ export function LibraryDetail() {
     if (newFieldType === 'time_mm_ss' || newFieldType === 'distance_speed') {
       options.targetDuration = (newFieldTargetMinutes * 60) + newFieldTargetSeconds;
     }
+    if (newFieldType === 'calculated_target') {
+      options.sourceFieldId = newFieldSourceId;
+      options.multiplier = newFieldMultiplier / 100; // stored as decimal
+      options.offset = newFieldOffset;
+    }
 
     addFieldToTemplateSheet(activeSheetId, { 
       label: newFieldLabel.trim(), 
@@ -67,6 +75,7 @@ export function LibraryDetail() {
     });
     setNewFieldLabel('');
     setNewFieldType('counter');
+    setNewFieldSourceId('');
   };
 
   return (
@@ -230,7 +239,53 @@ export function LibraryDetail() {
                     </div>
                   )}
 
-                  <Button type="submit" disabled={!newFieldLabel.trim()} className="w-full bg-indigo-600 hover:bg-indigo-700">
+                  {newFieldType === 'calculated_target' && (
+                    <div className="space-y-4 pt-4 border-t border-slate-200">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700">Donnée source (issue de la séance passée)</label>
+                        <select 
+                          className="w-full flex h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
+                          value={newFieldSourceId}
+                          onChange={e => setNewFieldSourceId(e.target.value)}
+                        >
+                          <option value="">Sélectionnez un critère source...</option>
+                          {sheets.find(s => s.id === activeSheetId)?.fields.map(f => (
+                            <option key={f.id} value={f.id}>{f.label} ({FIELD_TYPE_LABELS[f.type]})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-slate-700">Multiplicateur (%)</label>
+                          <div className="flex items-center gap-2">
+                            <Input 
+                              type="number"
+                              value={newFieldMultiplier}
+                              onChange={e => setNewFieldMultiplier(Number(e.target.value))}
+                              className="bg-white"
+                            />
+                            <span className="text-slate-500">%</span>
+                          </div>
+                          <p className="text-xs text-slate-500">Ex: 80 pour 80% (0.8x)</p>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-slate-700">Ajustement final</label>
+                          <Input 
+                            type="number"
+                            value={newFieldOffset}
+                            onChange={e => setNewFieldOffset(Number(e.target.value))}
+                            className="bg-white"
+                          />
+                          <p className="text-xs text-slate-500">Ex: +2, -1...</p>
+                        </div>
+                      </div>
+                      <div className="p-3 bg-indigo-50 text-indigo-800 rounded-md text-sm border border-indigo-100">
+                        <strong>Formule appliquée :</strong> (Valeur passée × {newFieldMultiplier / 100}) {newFieldOffset >= 0 ? '+' : '-'} {Math.abs(newFieldOffset)}
+                      </div>
+                    </div>
+                  )}
+
+                  <Button type="submit" disabled={!newFieldLabel.trim() || (newFieldType === 'calculated_target' && !newFieldSourceId)} className="w-full bg-indigo-600 hover:bg-indigo-700">
                     Ajouter le critère
                   </Button>
                 </form>

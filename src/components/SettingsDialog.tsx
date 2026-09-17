@@ -20,7 +20,8 @@ export const FIELD_TYPE_LABELS: Record<ObservationFieldType, string> = {
   orienteering_log: 'Carnet de Course d\'Orientation (CA2)',
   artistic_rating: 'Grille d\'évaluation CA3 (Danse / Gym)',
   match_stats: 'Statistiques de Match CA4 (Sports Co / Raquettes)',
-  health_fitness_log: 'Carnet Santé & Entretien CA5 (BPM, Ateliers, Fatigue)'
+  health_fitness_log: 'Carnet Santé & Entretien CA5 (BPM, Ateliers, Fatigue)',
+  calculated_target: 'Calcul depuis une séance passée (Cible, %)'
 };
 
 const CA_NAMES = {

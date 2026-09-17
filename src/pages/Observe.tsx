@@ -17,7 +17,7 @@ import { TimeMmSs } from '../components/TimeMmSs';
 
 export function Observe() {
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { sessions, sheets, activities, classes, addObservation } = useStore();
+  const { sessions, sheets, activities, classes, addObservation, observations } = useStore();
   
   const session = sessions.find(s => s.id === sessionId);
   const sheet = sheets.find(s => s.id === session?.sheetId);
@@ -27,6 +27,8 @@ export function Observe() {
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [isObserving, setIsObserving] = useState(false);
   const [data, setData] = useState<Record<string, Record<string, any>>>({});
+  const [bilans, setBilans] = useState<Record<string, string>>({});
+  const [perspectives, setPerspectives] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
 
   if (!session || !sheet || !cls) {
@@ -103,6 +105,8 @@ export function Observe() {
         sessionId: session.id,
         targetId,
         data: data[targetId] || {},
+        bilan: bilans[targetId] || '',
+        perspectives: perspectives[targetId] || '',
         timestamp: Date.now()
       });
     });
@@ -111,6 +115,8 @@ export function Observe() {
     setTimeout(() => {
       setSubmitted(false);
       setData({});
+      setBilans({});
+      setPerspectives({});
       setSelectedTargets([]);
       setIsObserving(false);
     }, 2000);
@@ -306,6 +312,42 @@ export function Observe() {
                         ))}
                       </div>
                     )}
+
+                    {field.type === 'calculated_target' && (() => {
+                      const sourceId = field.options?.sourceFieldId;
+                      const multiplier = field.options?.multiplier || 1;
+                      const offset = field.options?.offset || 0;
+                      
+                      // Find past value
+                      const pastObs = observations
+                        .filter(o => o.targetId === targetId && o.sessionId !== session.id && o.data[sourceId] !== undefined)
+                        .sort((a, b) => b.timestamp - a.timestamp);
+                      
+                      const pastValue = pastObs.length > 0 ? (pastObs[0].data[sourceId] as number) : null;
+                      const targetValue = pastValue !== null ? (pastValue * multiplier) + offset : null;
+
+                      return (
+                        <div className="flex flex-col items-center gap-3">
+                          {targetValue !== null ? (
+                            <div className="bg-indigo-50 text-indigo-800 px-4 py-2 rounded-lg font-bold w-full text-center border border-indigo-100 flex flex-col">
+                              <span className="text-xs uppercase tracking-wider text-indigo-500 mb-1">Cible calculée</span>
+                              <span className="text-2xl">{targetValue % 1 !== 0 ? targetValue.toFixed(1) : targetValue}</span>
+                            </div>
+                          ) : (
+                            <div className="bg-slate-50 text-slate-500 px-4 py-2 rounded-lg text-sm w-full text-center border border-slate-100">
+                              Aucune donnée passée pour calculer la cible.
+                            </div>
+                          )}
+                          <input 
+                            type="number"
+                            className="w-full h-16 text-center text-3xl font-bold font-mono rounded-xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none"
+                            placeholder="Résultat final..."
+                            value={studentData[field.id] === undefined ? '' : studentData[field.id] as number}
+                            onChange={(e) => handleNumberChange(targetId, field.id, e.target.value)}
+                          />
+                        </div>
+                      );
+                    })()}
 
                     {field.type === 'number' && (
                       <div className="flex flex-col items-center gap-2">
@@ -540,6 +582,33 @@ export function Observe() {
                     )}
                   </div>
                 ))}
+
+                {/* Logique EPS : Bilan et Perspectives */}
+                <div className="pt-8 space-y-6 border-t border-slate-100 mt-8">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">
+                      Bilan de l'observation
+                    </label>
+                    <textarea 
+                      className="w-full rounded-xl border-slate-200 bg-slate-50 p-4 text-sm focus:bg-white focus:border-blue-600 focus:ring-1 focus:ring-blue-600 min-h-[100px]"
+                      placeholder="Analyse des réussites, échecs ou points bloquants..."
+                      value={bilans[targetId] || ''}
+                      onChange={e => setBilans(prev => ({ ...prev, [targetId]: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">
+                      Perspectives
+                    </label>
+                    <textarea 
+                      className="w-full rounded-xl border-slate-200 bg-slate-50 p-4 text-sm focus:bg-white focus:border-blue-600 focus:ring-1 focus:ring-blue-600 min-h-[100px]"
+                      placeholder="Objectifs pour la prochaine séance, transformations attendues..."
+                      value={perspectives[targetId] || ''}
+                      onChange={e => setPerspectives(prev => ({ ...prev, [targetId]: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
               </div>
             </div>
           );
