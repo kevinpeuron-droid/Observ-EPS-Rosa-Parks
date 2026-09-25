@@ -21,18 +21,47 @@ export function StudentDetail() {
   const allSessions = sessions.filter(s => classActivities.some(a => a.id === s.activityId));
   const studentObservations = observations.filter(o => o.targetId === studentId);
 
+  // Compute attendance stats
+  const absentCount = studentObservations.filter(o => o.status === 'absent' || (Object.values(o.data).length > 0 && Object.values(o.data).every(v => v === 'A'))).length;
+  const dispenseCount = studentObservations.filter(o => o.status === 'dispense' || (Object.values(o.data).length > 0 && Object.values(o.data).every(v => v === 'D'))).length;
+  const noGearCount = studentObservations.filter(o => !!o.noGear).length;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 ease-out">
-      <div className="flex items-center gap-4">
-        <Link to={`/class/${classId}`} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
-          <ChevronLeft className="w-5 h-5" />
-        </Link>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
-            <User className="w-8 h-8 text-blue-600" />
-            {student.name}
-          </h1>
-          <p className="text-slate-500 mt-1">Bilan de cycle et restitution • {cls.name}</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-4">
+          <Link to={`/class/${classId}`} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
+            <ChevronLeft className="w-5 h-5" />
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
+              <User className="w-8 h-8 text-blue-600" />
+              {student.name}
+            </h1>
+            <p className="text-slate-500 mt-1">Bilan de cycle et restitution • {cls.name}</p>
+          </div>
+        </div>
+
+        {/* Attendance & Equipment Stats Chips */}
+        <div className="flex flex-wrap gap-2 text-xs font-bold">
+          <div className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 border border-slate-200">
+            {studentObservations.length} séance(s) notée(s)
+          </div>
+          {absentCount > 0 && (
+            <div className="px-3 py-1.5 rounded-xl bg-red-100 text-red-700 border border-red-200">
+              {absentCount} absence(s) (A)
+            </div>
+          )}
+          {dispenseCount > 0 && (
+            <div className="px-3 py-1.5 rounded-xl bg-amber-100 text-amber-800 border border-amber-200">
+              {dispenseCount} dispense(s) (D)
+            </div>
+          )}
+          {noGearCount > 0 && (
+            <div className="px-3 py-1.5 rounded-xl bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1">
+              <span>👟</span> {noGearCount} oubli(s) de matériel
+            </div>
+          )}
         </div>
       </div>
 
@@ -55,44 +84,79 @@ export function StudentDetail() {
                   const sObs = actObs.filter(o => o.sessionId === session.id);
                   if (sObs.length === 0) return null;
                   
+                  const latestSObs = [...sObs].sort((a, b) => b.timestamp - a.timestamp)[0];
+                  const sessionIsAbsent = latestSObs?.status === 'absent' || (sObs.length > 0 && sObs.every(o => Object.values(o.data).length > 0 && Object.values(o.data).every(v => v === 'A')));
+                  const sessionIsDispense = latestSObs?.status === 'dispense' || (sObs.length > 0 && sObs.every(o => Object.values(o.data).length > 0 && Object.values(o.data).every(v => v === 'D')));
+                  const sessionNoGear = latestSObs?.noGear || false;
+
                   const sheet = sheets.find(sh => sh.id === session.sheetId);
                   
                   return (
                     <div key={session.id} className="py-4 first:pt-0 last:pb-0">
-                      <div className="flex items-center gap-2 mb-4 text-slate-600">
-                        <Calendar className="w-4 h-4" />
-                        <h3 className="font-semibold">{session.name}</h3>
-                        <span className="text-sm">({format(new Date(session.date), 'dd/MM/yyyy')})</span>
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-4 text-slate-600">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-blue-600" />
+                          <h3 className="font-semibold text-slate-800">{session.name}</h3>
+                          <span className="text-xs text-slate-400">({format(new Date(session.date), 'dd/MM/yyyy')})</span>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-1.5">
+                          {sessionIsAbsent && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                              ABSENT (A)
+                            </span>
+                          )}
+                          {sessionIsDispense && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              DISPENSÉ (D)
+                            </span>
+                          )}
+                          {sessionNoGear && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1">
+                              <span>👟</span> SANS MATÉRIEL
+                            </span>
+                          )}
+                        </div>
                       </div>
                       
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                         {sheet?.fields.map(field => {
                           let value: number | string = '-';
                           
-                          if (field.type === 'counter' || field.type === 'boolean') {
-                            value = sObs.reduce((acc, o) => {
-                              if (field.type === 'counter') {
-                                return acc + ((o.data[field.id] as number) || 0);
-                              }
-                              if (field.type === 'boolean') {
-                                return acc + (o.data[field.id] ? 1 : 0);
-                              }
-                              return acc;
-                            }, 0);
-                          } else if (field.type === 'number' || field.type === 'speed_30s') {
-                            const validObs = sObs.filter(o => o.data[field.id] !== undefined && o.data[field.id] !== '');
-                            if (validObs.length > 0) {
-                              const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
-                              value = latest.data[field.id] as number;
+                          // Check if latest observation has 'A' or 'D'
+                          const validObs = sObs.filter(o => o.data[field.id] !== undefined && o.data[field.id] !== '');
+                          if (validObs.length > 0) {
+                            const latest = [...validObs].sort((a, b) => b.timestamp - a.timestamp)[0];
+                            const raw = latest.data[field.id];
+                            if (raw === 'A' || raw === 'a' || raw === 'D' || raw === 'd') {
+                              value = (raw === 'A' || raw === 'a') ? 'A' : 'D';
                             }
-                          } else if (field.type === 'time_duration' || field.type === 'time_mm_ss') {
-                            const validObs = sObs.filter(o => o.data[field.id] !== undefined);
-                            if (validObs.length > 0) {
-                              const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
-                              const tVal = latest.data[field.id];
-                              value = formatTimeDuration(tVal, field.options?.units);
-                            }
-                          } else if (field.type === 'orienteering_star') {
+                          }
+
+                          if (value !== 'A' && value !== 'D') {
+                            if (field.type === 'counter' || field.type === 'boolean') {
+                              value = sObs.reduce((acc, o) => {
+                                const v = o.data[field.id];
+                                if (field.type === 'counter') {
+                                  return acc + (typeof v === 'number' ? v : 0);
+                                }
+                                if (field.type === 'boolean') {
+                                  return acc + (v ? 1 : 0);
+                                }
+                                return acc;
+                              }, 0);
+                            } else if (field.type === 'number' || field.type === 'speed_30s') {
+                              if (validObs.length > 0) {
+                                const latest = [...validObs].sort((a, b) => b.timestamp - a.timestamp)[0];
+                                value = latest.data[field.id] as number;
+                              }
+                            } else if (field.type === 'time_duration' || field.type === 'time_mm_ss') {
+                              if (validObs.length > 0) {
+                                const latest = [...validObs].sort((a, b) => b.timestamp - a.timestamp)[0];
+                                const tVal = latest.data[field.id];
+                                value = formatTimeDuration(tVal, field.options?.units);
+                              }
+                            } else if (field.type === 'orienteering_star') {
                             const validObs = sObs.filter(o => o.data[field.id]);
                             if (validObs.length > 0) {
                               const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
@@ -321,15 +385,28 @@ export function StudentDetail() {
                               );
                             }
                           }
+                        }
                           
                           return (
                             <div key={field.id} className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-col justify-between">
                               <div className="text-xs text-blue-600 font-medium mb-1 uppercase tracking-wider">{field.label}</div>
                               <div className="text-2xl font-bold text-slate-900 font-mono">
-                                {value}
-                                {field.type === 'speed_30s' && value !== '-' && <span className="text-sm text-slate-500 ml-1">m</span>}
+                                {value === 'A' ? (
+                                  <span className="text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded text-sm font-bold inline-block">
+                                    ABS (A)
+                                  </span>
+                                ) : value === 'D' ? (
+                                  <span className="text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded text-sm font-bold inline-block">
+                                    DISP (D)
+                                  </span>
+                                ) : (
+                                  <>
+                                    {value}
+                                    {field.type === 'speed_30s' && value !== '-' && <span className="text-sm text-slate-500 ml-1">m</span>}
+                                  </>
+                                )}
                               </div>
-                              {field.type === 'speed_30s' && value !== '-' && (
+                              {field.type === 'speed_30s' && value !== '-' && value !== 'A' && value !== 'D' && (
                                 <div className="text-sm font-bold text-emerald-600 mt-1">
                                   {((value as number) * 0.12).toFixed(1)} km/h
                                 </div>

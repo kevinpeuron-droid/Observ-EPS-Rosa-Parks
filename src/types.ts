@@ -68,16 +68,22 @@ export type Activity = {
   id: string;
   classId: string;
   name: string;
+  ca?: 1 | 2 | 3 | 4 | 5;
+  templateId?: string;
   evaluationCriteria?: EvaluationCriterion[];
-  grades?: Record<string, Record<string, number>>; // studentId -> criterionId -> score
+  grades?: Record<string, Record<string, number | string>>; // studentId -> criterionId -> score (or 'A', 'D')
 };
+
+export type StudentSessionStatus = 'present' | 'absent' | 'dispense';
 
 export type ObservationRecord = {
   id: string;
   sessionId: string;
   observerId?: string;
   targetId: string; // Student id or Team id
-  data: Record<string, any>; // fieldId -> value
+  data: Record<string, any>; // fieldId -> value (can also be 'A' or 'D' for absent / dispensé)
+  status?: StudentSessionStatus; // 'present' | 'absent' | 'dispense'
+  noGear?: boolean; // Élève sans matériel / oubli de tenue
   bilan?: string;
   perspectives?: string;
   timestamp: number;

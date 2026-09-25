@@ -51,20 +51,41 @@ export function Project() {
   const targetStats = allTargets.map(target => {
     const obs = sessionObs.filter(o => o.targetId === target.id);
     const aggregates: Record<string, any> = {};
+    const latestObs = obs.length > 0 ? [...obs].sort((a, b) => b.timestamp - a.timestamp)[0] : null;
+
+    const isAbsent = latestObs?.status === 'absent' || (obs.length > 0 && obs.every(o => Object.values(o.data).some(v => v === 'A')));
+    const isDispense = latestObs?.status === 'dispense' || (obs.length > 0 && obs.every(o => Object.values(o.data).some(v => v === 'D')));
+    const noGear = latestObs?.noGear || false;
     
     sheet.fields.forEach(f => {
+      // Check if latest observation has 'A' or 'D' for this field
+      const validObs = obs.filter(o => o.data[f.id] !== undefined && o.data[f.id] !== '');
+      if (validObs.length > 0) {
+        const latest = [...validObs].sort((a, b) => b.timestamp - a.timestamp)[0];
+        const latestVal = latest.data[f.id];
+        if (latestVal === 'A' || latestVal === 'a') {
+          aggregates[f.id] = 'A';
+          return;
+        }
+        if (latestVal === 'D' || latestVal === 'd') {
+          aggregates[f.id] = 'D';
+          return;
+        }
+      }
+
       if (f.type === 'counter') {
-        aggregates[f.id] = obs.reduce((sum, o) => sum + ((o.data[f.id] as number) || 0), 0);
+        aggregates[f.id] = obs.reduce((sum, o) => {
+          const v = o.data[f.id];
+          return sum + (typeof v === 'number' ? v : 0);
+        }, 0);
       } else if (f.type === 'number' || f.type === 'speed_30s' || f.type === 'distance_speed' || f.type === 'rating') {
-        const validObs = obs.filter(o => o.data[f.id] !== undefined && o.data[f.id] !== '');
         if (validObs.length > 0) {
-           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
-           aggregates[f.id] = latest.data[f.id] as number;
+           const latest = [...validObs].sort((a, b) => b.timestamp - a.timestamp)[0];
+           aggregates[f.id] = latest.data[f.id];
         }
       } else if (f.type === 'time_mm_ss' || f.type === 'time_duration') {
-        const validObs = obs.filter(o => o.data[f.id] !== undefined);
         if (validObs.length > 0) {
-           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           const latest = [...validObs].sort((a, b) => b.timestamp - a.timestamp)[0];
            aggregates[f.id] = latest.data[f.id];
         }
       } else if (f.type === 'orienteering_star') {
@@ -164,7 +185,10 @@ export function Project() {
     return {
       target,
       obsCount: obs.length,
-      aggregates
+      aggregates,
+      isAbsent,
+      isDispense,
+      noGear
     };
   }).filter(s => s.obsCount > 0).sort((a, b) => b.obsCount - a.obsCount);
 
@@ -201,19 +225,63 @@ export function Project() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {targetStats.map(({ target, obsCount, aggregates }) => (
+            {targetStats.map(({ target, obsCount, aggregates, isAbsent, isDispense, noGear }) => (
               <div 
                 key={target.id} 
                 className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-500"
               >
                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-bl-full -mr-8 -mt-8" />
-                <h3 className="text-2xl font-bold mb-6 text-white">
-                  {target.isTeam && <span className="text-sm font-bold text-emerald-500 uppercase tracking-wider block mb-1">Équipe</span>}
-                  {target.name}
-                </h3>
+                
+                {/* Header with Attendance and Material Badges */}
+                <div className="flex items-start justify-between gap-3 mb-6 relative z-10">
+                  <div>
+                    <h3 className="text-2xl font-bold text-white">
+                      {target.name}
+                    </h3>
+                    {target.isTeam && <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider block mt-0.5">Équipe</span>}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 justify-end">
+                    {isAbsent && (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                        ABSENT (A)
+                      </span>
+                    )}
+                    {isDispense && (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                        DISPENSÉ (D)
+                      </span>
+                    )}
+                    {noGear && (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center gap-1">
+                        <span>👟</span> SANS MATÉRIEL
+                      </span>
+                    )}
+                  </div>
+                </div>
                 
                 <div className="space-y-4 relative z-10">
                   {sheet.fields.map(field => {
+                    const val = aggregates[field.id];
+
+                    // Check for special attendance codes 'A' or 'D' in any field
+                    if (val === 'A' || val === 'a' || val === 'D' || val === 'd') {
+                      const isA = val === 'A' || val === 'a';
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400 font-medium">{field.label}</span>
+                            <span className={`px-3 py-1 rounded-lg text-lg font-bold border ${
+                              isA 
+                                ? 'text-red-400 bg-red-500/20 border-red-500/30' 
+                                : 'text-amber-400 bg-amber-500/20 border-amber-500/30'
+                            }`}>
+                              {isA ? 'ABS (A)' : 'DISP (D)'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    }
                     if (field.type === 'counter' || field.type === 'number' || field.type === 'speed_30s' || field.type === 'distance_speed' || field.type === 'rating') {
                       const isDistanceSpeed = field.type === 'distance_speed';
                       const hasTargetDuration = field.options?.targetDuration;
