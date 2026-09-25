@@ -29,12 +29,36 @@ import { StudentSessionStatus } from '../types';
 
 export function Observe() {
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { sessions, sheets, activities, classes, addObservation, observations } = useStore();
+  const { 
+    sessions, 
+    sheets, 
+    activities, 
+    classes, 
+    addObservation, 
+    saveStudentFullObservation,
+    observations, 
+    loaded, 
+    createDefaultSheetForActivity 
+  } = useStore();
   
   const session = sessions.find(s => s.id === sessionId);
-  const sheet = sheets.find(s => s.id === session?.sheetId);
   const activity = activities.find(a => a.id === session?.activityId);
   const cls = classes.find(c => c.id === activity?.classId);
+  const activitySheets = sheets.filter(s => s.activityId === session?.activityId);
+
+  const [selectedSheetId, setSelectedSheetId] = useState<string>(session?.sheetId || '');
+
+  useEffect(() => {
+    if (session?.sheetId && sheets.some(s => s.id === session.sheetId)) {
+      setSelectedSheetId(session.sheetId);
+    } else if (activitySheets.length > 0 && !selectedSheetId) {
+      setSelectedSheetId(activitySheets[0].id);
+    }
+  }, [session?.sheetId, activitySheets.length]);
+
+  const sheet = sheets.find(s => s.id === selectedSheetId) || 
+    (session?.sheetId ? sheets.find(s => s.id === session.sheetId) : undefined) || 
+    activitySheets[0];
 
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [isObserving, setIsObserving] = useState(false);
@@ -64,12 +88,89 @@ export function Observe() {
     setStudentNoGear(prev => ({ ...initialNoGear, ...prev }));
   }, [session?.id, observations]);
 
-  if (!session || !sheet || !cls) {
+  // Loading state
+  if (!loaded) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold mb-2">Séance non configurée</h1>
-          <p className="text-slate-400">Demandez à votre professeur de vérifier le QR Code ou la configuration.</p>
+      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-12 h-12 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin mb-4" />
+        <h2 className="text-xl font-bold">Chargement de la séance EPS...</h2>
+        <p className="text-slate-400 text-sm mt-1">Connexion à la base de données en cours...</p>
+      </div>
+    );
+  }
+
+  // Session missing state
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-red-500/20 text-red-400 flex items-center justify-center mb-4">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h1 className="text-2xl font-bold mb-2">Séance introuvable</h1>
+        <p className="text-slate-400 text-sm max-w-sm mb-6">
+          Cette séance n'a pas été trouvée. Demandez à votre enseignant de vérifier le QR Code ou le lien.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors"
+        >
+          Actualiser la page
+        </button>
+      </div>
+    );
+  }
+
+  // Activity or Class missing
+  if (!cls || !activity) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mb-4">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h1 className="text-2xl font-bold mb-2">Configuration de classe incomplète</h1>
+        <p className="text-slate-400 text-sm max-w-sm mb-6">
+          L'activité ou la classe liée à cette séance n'est pas accessible.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold"
+        >
+          Actualiser
+        </button>
+      </div>
+    );
+  }
+
+  // No sheet in activity yet
+  if (!sheet) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-4">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h1 className="text-2xl font-bold mb-2">Situation d'observation à initialiser</h1>
+        <p className="text-slate-300 text-sm max-w-md mb-6">
+          Aucune fiche d'observation n'est encore configurée pour ce cycle ({activity.name}). Vous pouvez l'initialiser en un clic :
+        </p>
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <Button
+            size="lg"
+            onClick={() => {
+              const newId = createDefaultSheetForActivity(activity.id);
+              setSelectedSheetId(newId);
+            }}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+          >
+            Créer la fiche d'observation (1 clic)
+          </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => window.location.reload()}
+            className="text-slate-300 border-slate-700 hover:bg-slate-800"
+          >
+            Actualiser
+          </Button>
         </div>
       </div>
     );
@@ -87,7 +188,7 @@ export function Observe() {
       const code = status === 'absent' ? 'A' : 'D';
       setData(prev => {
         const currentTargetData = { ...(prev[targetId] || {}) };
-        sheet.fields.forEach(f => {
+        (sheet.fields || []).forEach(f => {
           if (currentTargetData[f.id] === undefined || currentTargetData[f.id] === '') {
             currentTargetData[f.id] = code;
           }
@@ -101,7 +202,7 @@ export function Observe() {
       // Revert any fields that were 'A' or 'D' back to empty
       setData(prev => {
         const currentTargetData = { ...(prev[targetId] || {}) };
-        sheet.fields.forEach(f => {
+        (sheet.fields || []).forEach(f => {
           if (currentTargetData[f.id] === 'A' || currentTargetData[f.id] === 'D') {
             delete currentTargetData[f.id];
           }
@@ -198,21 +299,22 @@ export function Observe() {
     });
   };
 
-  const handleSubmit = () => {
-    if (selectedTargets.length === 0) return;
+  const handleSubmit = async () => {
+    if (selectedTargets.length === 0 || !sheet) return;
     
-    selectedTargets.forEach(targetId => {
-      addObservation({
-        sessionId: session.id,
+    for (const targetId of selectedTargets) {
+      await saveStudentFullObservation(
+        session.id,
         targetId,
-        data: data[targetId] || {},
-        status: studentStatus[targetId] || 'present',
-        noGear: !!studentNoGear[targetId],
-        bilan: bilans[targetId] || '',
-        perspectives: perspectives[targetId] || '',
-        timestamp: Date.now()
-      });
-    });
+        data[targetId] || {},
+        {
+          status: studentStatus[targetId] || 'present',
+          noGear: !!studentNoGear[targetId],
+          bilan: bilans[targetId] || '',
+          perspectives: perspectives[targetId] || ''
+        }
+      );
+    }
 
     setSubmitted(true);
     setTimeout(() => {
@@ -224,7 +326,7 @@ export function Observe() {
       setPerspectives({});
       setSelectedTargets([]);
       setIsObserving(false);
-    }, 2000);
+    }, 1800);
   };
 
   if (submitted) {
@@ -240,9 +342,33 @@ export function Observe() {
   if (!isObserving) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col">
-        <header className="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-10">
-          <h1 className="font-bold text-lg">{sheet.name}</h1>
-          <p className="text-blue-100 text-sm">{cls.name} • {session.name}</p>
+        <header className="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="font-bold text-lg">{sheet.name}</h1>
+              {activitySheets.length > 1 && (
+                <span className="text-[10px] bg-blue-700 text-blue-200 px-2 py-0.5 rounded-full font-semibold">
+                  {activitySheets.length} situations
+                </span>
+              )}
+            </div>
+            <p className="text-blue-100 text-xs">{cls.name} • {session.name} ({activity.name})</p>
+          </div>
+
+          {activitySheets.length > 1 && (
+            <div className="flex items-center gap-2 bg-blue-700/80 p-1 rounded-xl self-start sm:self-center">
+              <label className="text-[11px] font-bold text-blue-200 pl-2">Situation :</label>
+              <select
+                value={sheet.id}
+                onChange={e => setSelectedSheetId(e.target.value)}
+                className="bg-white text-slate-900 text-xs font-bold rounded-lg px-2.5 py-1 focus:outline-none"
+              >
+                {activitySheets.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </header>
 
         <main className="flex-1 p-4 max-w-lg mx-auto w-full space-y-6">
@@ -340,17 +466,49 @@ export function Observe() {
   // Active observation form
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <header className="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-20 flex items-center justify-between">
-        <div>
-          <h1 className="font-bold text-lg">{sheet.name}</h1>
-          <p className="text-blue-100 text-xs">{cls.name} • {session.name}</p>
+      <header className="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center justify-between w-full sm:w-auto">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="font-bold text-lg">{sheet.name}</h1>
+              {activitySheets.length > 1 && (
+                <span className="text-[10px] bg-blue-700 text-blue-200 px-2 py-0.5 rounded-full font-semibold">
+                  {activitySheets.length} situations
+                </span>
+              )}
+            </div>
+            <p className="text-blue-100 text-xs">{cls.name} • {session.name} ({activity.name})</p>
+          </div>
+          <button 
+            onClick={() => setIsObserving(false)} 
+            className="sm:hidden text-blue-100 hover:text-white text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-700/60"
+          >
+            Changer élèves
+          </button>
         </div>
-        <button 
-          onClick={() => setIsObserving(false)} 
-          className="text-blue-100 hover:text-white text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-700/60"
-        >
-          Changer élèves
-        </button>
+
+        <div className="flex items-center gap-2 self-end sm:self-center">
+          {activitySheets.length > 1 && (
+            <div className="flex items-center gap-1.5 bg-blue-700/80 p-1 rounded-xl">
+              <label className="text-[11px] font-bold text-blue-200 pl-1.5">Situation :</label>
+              <select
+                value={sheet.id}
+                onChange={e => setSelectedSheetId(e.target.value)}
+                className="bg-white text-slate-900 text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"
+              >
+                {activitySheets.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <button 
+            onClick={() => setIsObserving(false)} 
+            className="hidden sm:inline-flex text-blue-100 hover:text-white text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-700/60 transition-colors"
+          >
+            Changer élèves
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 p-4 max-w-2xl mx-auto w-full space-y-6">
@@ -441,7 +599,7 @@ export function Observe() {
                     type="button"
                     onClick={() => {
                       const updated = { ...(data[targetId] || {}) };
-                      sheet.fields.forEach(f => { updated[f.id] = 'A'; });
+                      (sheet.fields || []).forEach(f => { updated[f.id] = 'A'; });
                       setData(prev => ({ ...prev, [targetId]: updated }));
                     }}
                     className="font-bold underline text-red-700 hover:text-red-900"
@@ -461,7 +619,7 @@ export function Observe() {
                     type="button"
                     onClick={() => {
                       const updated = { ...(data[targetId] || {}) };
-                      sheet.fields.forEach(f => { updated[f.id] = 'D'; });
+                      (sheet.fields || []).forEach(f => { updated[f.id] = 'D'; });
                       setData(prev => ({ ...prev, [targetId]: updated }));
                     }}
                     className="font-bold underline text-amber-700 hover:text-amber-900"
@@ -473,7 +631,12 @@ export function Observe() {
 
               {/* Observation Fields */}
               <div className="space-y-6">
-                {sheet.fields.map(field => {
+                {(sheet.fields || []).length === 0 ? (
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-500">
+                    Cette situation ne contient pas encore de critères. Vous pouvez noter la présence et le bilan ci-dessous.
+                  </div>
+                ) : (
+                  (sheet.fields || []).map(field => {
                   const val = studentData[field.id];
                   const isA = val === 'A' || val === 'a';
                   const isD = val === 'D' || val === 'd';
@@ -900,7 +1063,7 @@ export function Observe() {
                       )}
                     </div>
                   );
-                })}
+                }))}
 
                 {/* Bilan and Perspectives */}
                 <div className="pt-6 space-y-4 border-t border-slate-100 mt-6">

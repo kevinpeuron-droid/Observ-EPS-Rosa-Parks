@@ -20,7 +20,8 @@ import {
   Sparkles, 
   AlertTriangle,
   Tag,
-  Star
+  Star,
+  FileSpreadsheet
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { StudentSessionStatus } from '../types';
@@ -54,7 +55,8 @@ export function SessionDetail() {
     observations, 
     updateSession, 
     deleteSession, 
-    setStudentSessionAttendance 
+    setStudentSessionAttendance,
+    createDefaultSheetForActivity
   } = useStore();
   
   const session = sessions.find(s => s.id === sessionId);
@@ -75,8 +77,13 @@ export function SessionDetail() {
       setPositiveStudentIds(session.positiveStudentIds || []);
       setNegativeStudentIds(session.negativeStudentIds || []);
       setStudentImpactNotes(session.studentImpactNotes || {});
+
+      // Auto-assign first sheet if not assigned yet and sheets exist
+      if (!session.sheetId && sessionSheets.length > 0) {
+        updateSession(session.id, { sheetId: sessionSheets[0].id });
+      }
     }
-  }, [session?.id]);
+  }, [session?.id, session?.sheetId, sessionSheets.length]);
 
   if (!session) return <div className="p-8 text-center text-slate-500">Séance introuvable.</div>;
 
@@ -215,10 +222,17 @@ export function SessionDetail() {
             <span className="hidden sm:inline">Supprimer</span>
           </Button>
 
+          <Link to={`/session/${session.id}/entry`}>
+            <Button size="lg" className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
+              <FileSpreadsheet className="w-5 h-5 mr-2" />
+              Mode Saisie Prof (Tableau)
+            </Button>
+          </Link>
+
           <a href={observeUrl} target="_blank" rel="noreferrer">
             <Button size="lg" variant="outline" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200">
               <Eye className="w-5 h-5 mr-2" />
-              Saisie Terrain
+              Saisie Élèves (Tablette)
             </Button>
           </a>
 
@@ -661,39 +675,51 @@ export function SessionDetail() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center">
-            <div className="mb-6 w-full">
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Fiche d'observation active :
-              </label>
-              <select 
-                className="w-full flex h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-                value={session.sheetId || ''}
-                onChange={handleSheetChange}
-              >
-                <option value="" disabled>-- Sélectionner une fiche --</option>
-                {sessionSheets.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-              {!session.sheetId && (
-                <p className="text-xs text-amber-600 mt-2">
-                  ⚠️ Veuillez sélectionner une fiche pour que la saisie élève fonctionne.
+            {sessionSheets.length === 0 ? (
+              <div className="w-full p-4 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-3">
+                <p className="text-xs text-amber-800 font-medium">
+                  Aucune situation d'observation n'est encore configurée pour ce cycle.
                 </p>
-              )}
-            </div>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const newId = createDefaultSheetForActivity(session.activityId);
+                    updateSession(session.id, { sheetId: newId });
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs mx-auto"
+                >
+                  <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                  Créer la situation d'observation (1 clic)
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="mb-6 w-full">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Fiche d'observation active :
+                  </label>
+                  <select 
+                    className="w-full flex h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 font-medium"
+                    value={session.sheetId || sessionSheets[0]?.id || ''}
+                    onChange={handleSheetChange}
+                  >
+                    {sessionSheets.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} ({s.fields.length} critères)</option>
+                    ))}
+                  </select>
+                </div>
 
-            {session.sheetId && (
-              <div className="p-4 bg-white border-4 border-slate-900 rounded-xl shadow-xs">
-                <QRCodeSVG value={observeUrl} size={180} level="H" />
-              </div>
-            )}
-            {session.sheetId && (
-              <div className="mt-4 text-center">
-                <p className="text-sm text-slate-500 mb-2">Ou utilisez ce lien direct :</p>
-                <a href={observeUrl} target="_blank" rel="noreferrer" className="text-blue-600 font-medium text-sm hover:underline break-all">
-                  {observeUrl}
-                </a>
-              </div>
+                <div className="p-4 bg-white border-4 border-slate-900 rounded-xl shadow-xs">
+                  <QRCodeSVG value={observeUrl} size={180} level="H" />
+                </div>
+
+                <div className="mt-4 text-center">
+                  <p className="text-sm text-slate-500 mb-2">Ou utilisez ce lien direct :</p>
+                  <a href={observeUrl} target="_blank" rel="noreferrer" className="text-blue-600 font-medium text-sm hover:underline break-all">
+                    {observeUrl}
+                  </a>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

@@ -16,7 +16,8 @@ import {
   Layers, 
   BookOpen, 
   Sparkles,
-  Settings
+  Settings,
+  FileSpreadsheet
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -39,7 +40,8 @@ export function ActivityDetail() {
     addSession, 
     deleteSession, 
     addSheet, 
-    deleteSheet 
+    deleteSheet,
+    createDefaultSheetForActivity
   } = useStore();
   
   const activity = activities.find(a => a.id === activityId);
@@ -76,11 +78,18 @@ export function ActivityDetail() {
   const handleAddSession = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSessionName.trim()) return;
+
+    let targetSheetId = actSheets[0]?.id;
+    if (!targetSheetId) {
+      targetSheetId = createDefaultSheetForActivity(activity.id);
+    }
+
     addSession({
       activityId: activity.id,
       name: newSessionName.trim(),
       date: new Date().toISOString(),
       feedback: '',
+      sheetId: targetSheetId,
     });
     setNewSessionName('');
   };
@@ -238,7 +247,20 @@ export function ActivityDetail() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/session/${session.id}/entry`);
+                        }}
+                        className="text-xs text-indigo-700 bg-indigo-50/60 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300"
+                        title="Ouvrir la saisie rapide en tableau pour le professeur"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 mr-1" />
+                        Saisie Prof
+                      </Button>
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();

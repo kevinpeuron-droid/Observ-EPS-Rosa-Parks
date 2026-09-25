@@ -1,16 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Règle globale par défaut (fermée)
-    match /{document=**} {
-      allow read, write: if false;
-    }
-    
-    // Accès public total
-    match /workspaces/default {
+    match /workspaces/{workspaceId} {
       allow read, write: if true;
       
-      match /observations/{obsId} {
+      match /{allChildren=**} {
         allow read, write: if true;
       }
     }

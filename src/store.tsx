@@ -55,13 +55,17 @@ interface StoreContextType extends StoreState {
   addSheet: (sheet: Omit<ObservationSheet, 'id'>) => void;
   updateSheet: (id: string, sheet: Partial<ObservationSheet>) => void;
   deleteSheet: (id: string) => void;
+  createDefaultSheetForActivity: (activityId: string, sheetName?: string) => string;
   addFieldToSheet: (sheetId: string, field: Omit<ObservationField, 'id'>) => void;
   removeFieldFromSheet: (sheetId: string, fieldId: string) => void;
   updateFieldInSheet: (sheetId: string, fieldId: string, updates: Partial<ObservationField>) => void;
+  loaded: boolean;
   
   addObservation: (obs: Omit<ObservationRecord, 'id'>) => void;
   updateObservation: (id: string, updates: Partial<ObservationRecord>) => Promise<void>;
   setStudentSessionAttendance: (sessionId: string, targetId: string, status: StudentSessionStatus, noGear?: boolean) => Promise<void>;
+  setStudentObservationData: (sessionId: string, targetId: string, fieldId: string, value: any) => Promise<void>;
+  saveStudentFullObservation: (sessionId: string, targetId: string, data: Record<string, any>, extra?: { status?: StudentSessionStatus; noGear?: boolean; bilan?: string; perspectives?: string }) => Promise<void>;
   clearObservations: (sessionId: string) => void;
   
   addTemplateActivity: (name: string, ca?: 1 | 2 | 3 | 4 | 5) => void;
@@ -380,6 +384,70 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateSheet = (id: string, sheet: Partial<ObservationSheet>) => updateWorkspace(s => ({ sheets: s.sheets.map(sh => (sh.id === id ? { ...sh, ...sheet } : sh)) }));
   const deleteSheet = (id: string) => updateWorkspace(s => ({ sheets: s.sheets.filter(sh => sh.id !== id) }));
   
+  const createDefaultSheetForActivity = (activityId: string, sheetName?: string): string => {
+    const act = state.activities.find(a => a.id === activityId);
+    const actCa = act?.ca || 1;
+    
+    // Check if there is a matching templateSheet from templateActivities
+    let fieldsToUse: ObservationField[] = [];
+    if (act?.templateId) {
+      const tSheets = state.templateSheets.filter(ts => ts.templateActivityId === act.templateId);
+      if (tSheets.length > 0 && tSheets[0].fields && tSheets[0].fields.length > 0) {
+        fieldsToUse = tSheets[0].fields.map(f => ({ ...f, id: generateId() }));
+      }
+    }
+    
+    if (fieldsToUse.length === 0) {
+      // Default standard fields according to CA
+      if (actCa === 1) {
+        fieldsToUse = [
+          { id: generateId(), label: 'Performance / Résultat', type: 'number', options: { units: 'pts/m' } },
+          { id: generateId(), label: 'Essais réussis', type: 'counter' },
+          { id: generateId(), label: 'Technique / Régularité', type: 'rating' }
+        ];
+      } else if (actCa === 2) {
+        fieldsToUse = [
+          { id: generateId(), label: 'Temps réalisé', type: 'time_mm_ss' },
+          { id: generateId(), label: 'Balises trouvées', type: 'counter' },
+          { id: generateId(), label: 'Parcours validé', type: 'boolean' }
+        ];
+      } else if (actCa === 3) {
+        fieldsToUse = [
+          { id: generateId(), label: 'Éléments maîtrisés', type: 'counter' },
+          { id: generateId(), label: 'Note artistique / Exécution', type: 'rating' },
+          { id: generateId(), label: 'Prestation validée', type: 'boolean' }
+        ];
+      } else if (actCa === 4) {
+        fieldsToUse = [
+          { id: generateId(), label: 'Points marqués', type: 'counter' },
+          { id: generateId(), label: 'Points encaissés', type: 'counter' },
+          { id: generateId(), label: 'Victoire / Match gagné', type: 'boolean' }
+        ];
+      } else {
+        fieldsToUse = [
+          { id: generateId(), label: 'Répétitions / Séries', type: 'counter' },
+          { id: generateId(), label: 'Ressenti de l\'effort (1 à 5)', type: 'rating' },
+          { id: generateId(), label: 'Contrat respecté', type: 'boolean' }
+        ];
+      }
+    }
+
+    const newSheetId = generateId();
+    const newSheet: ObservationSheet = {
+      id: newSheetId,
+      activityId,
+      name: sheetName || `Situation 1 - Observation ${act?.name || 'EPS'}`,
+      isMultiStudent: false,
+      fields: fieldsToUse
+    };
+
+    updateWorkspace(s => ({
+      sheets: [...s.sheets, newSheet]
+    }));
+
+    return newSheetId;
+  };
+  
   const addFieldToSheet = (sheetId: string, field: Omit<ObservationField, 'id'>) => {
     updateWorkspace(s => ({
       sheets: s.sheets.map(sh => {
@@ -449,6 +517,61 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         data: {},
         status,
         noGear: !!noGear,
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  const setStudentObservationData = async (
+    sessionId: string,
+    targetId: string,
+    fieldId: string,
+    value: any
+  ) => {
+    const existing = state.observations.find(o => o.sessionId === sessionId && o.targetId === targetId);
+    if (existing) {
+      const updatedData = { ...existing.data, [fieldId]: value };
+      const updates: Partial<ObservationRecord> = { data: updatedData, timestamp: Date.now() };
+      if (value === 'A' || value === 'a') updates.status = 'absent';
+      else if (value === 'D' || value === 'd') updates.status = 'dispense';
+      await updateObservation(existing.id, updates);
+    } else {
+      await addObservation({
+        sessionId,
+        targetId,
+        data: { [fieldId]: value },
+        status: (value === 'A' || value === 'a') ? 'absent' : (value === 'D' || value === 'd') ? 'dispense' : 'present',
+        noGear: false,
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  const saveStudentFullObservation = async (
+    sessionId: string,
+    targetId: string,
+    data: Record<string, any>,
+    extra?: { status?: StudentSessionStatus; noGear?: boolean; bilan?: string; perspectives?: string }
+  ) => {
+    const existing = state.observations.find(o => o.sessionId === sessionId && o.targetId === targetId);
+    if (existing) {
+      await updateObservation(existing.id, {
+        data: { ...existing.data, ...data },
+        ...(extra?.status ? { status: extra.status } : {}),
+        ...(extra?.noGear !== undefined ? { noGear: extra.noGear } : {}),
+        ...(extra?.bilan !== undefined ? { bilan: extra.bilan } : {}),
+        ...(extra?.perspectives !== undefined ? { perspectives: extra.perspectives } : {}),
+        timestamp: Date.now()
+      });
+    } else {
+      await addObservation({
+        sessionId,
+        targetId,
+        data,
+        status: extra?.status || 'present',
+        noGear: !!extra?.noGear,
+        bilan: extra?.bilan || '',
+        perspectives: extra?.perspectives || '',
         timestamp: Date.now()
       });
     }
@@ -598,12 +721,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addActivity, updateActivity, deleteActivity, createCustomActivity,
     addActivityFromTemplate, syncActivityFromTemplate,
     addSession, updateSession, deleteSession,
-    addSheet, updateSheet, deleteSheet, addFieldToSheet, removeFieldFromSheet, updateFieldInSheet,
-    addObservation, updateObservation, setStudentSessionAttendance, clearObservations,
+    addSheet, updateSheet, deleteSheet, createDefaultSheetForActivity, addFieldToSheet, removeFieldFromSheet, updateFieldInSheet,
+    addObservation, updateObservation, setStudentSessionAttendance, setStudentObservationData, saveStudentFullObservation, clearObservations,
     addTemplateActivity, updateTemplateActivity, deleteTemplateActivity,
     addTemplateSheet, updateTemplateSheet, deleteTemplateSheet,
     addFieldToTemplateSheet, removeFieldFromTemplateSheet, updateFieldInTemplateSheet,
-    loadOfficialEpsDatabase
+    loadOfficialEpsDatabase,
+    loaded
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
