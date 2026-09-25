@@ -15,11 +15,11 @@ interface StoreState {
 }
 
 const DEFAULT_CA_MAPPING: Record<number, ObservationFieldType[]> = {
-  1: ['counter', 'rating', 'boolean', 'number', 'speed_30s', 'distance_speed', 'time_mm_ss', 'project_target', 'performance_log'],
-  2: ['counter', 'rating', 'boolean', 'number', 'time_mm_ss', 'orienteering_star', 'orienteering_log'],
-  3: ['counter', 'rating', 'boolean', 'number', 'sequence_planner', 'artistic_rating'],
-  4: ['counter', 'rating', 'boolean', 'number', 'ratio_action', 'match_stats'],
-  5: ['counter', 'rating', 'boolean', 'number', 'training_log', 'health_fitness_log']
+  1: ['counter', 'rating', 'boolean', 'number', 'speed_30s', 'distance_speed', 'time_mm_ss', 'time_duration', 'project_target', 'performance_log'],
+  2: ['counter', 'rating', 'boolean', 'number', 'time_mm_ss', 'time_duration', 'orienteering_star', 'orienteering_log'],
+  3: ['counter', 'rating', 'boolean', 'number', 'time_duration', 'sequence_planner', 'artistic_rating'],
+  4: ['counter', 'rating', 'boolean', 'number', 'time_duration', 'ratio_action', 'match_stats'],
+  5: ['counter', 'rating', 'boolean', 'number', 'time_duration', 'training_log', 'health_fitness_log']
 };
 
 const initialState: StoreState = {

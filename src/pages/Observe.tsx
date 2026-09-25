@@ -14,6 +14,7 @@ import { ArtisticRating } from '../components/ArtisticRating';
 import { MatchStats } from '../components/MatchStats';
 import { HealthFitnessLog } from '../components/HealthFitnessLog';
 import { TimeMmSs } from '../components/TimeMmSs';
+import { TimeDurationInput } from '../components/TimeDurationInput';
 
 export function Observe() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -427,6 +428,29 @@ export function Observe() {
                             </div>
                           )}
                         </div>
+                      );
+                    })()}
+
+                    {field.type === 'time_duration' && (() => {
+                      const timeVal = studentData[field.id];
+                      const units = field.options?.units || ['minutes', 'seconds'];
+                      const targetSeconds = field.options?.targetDuration;
+
+                      return (
+                        <TimeDurationInput
+                          value={timeVal}
+                          units={units}
+                          targetDurationSeconds={targetSeconds}
+                          onChange={(newVal) => {
+                            setData(prev => {
+                              const targetData = prev[targetId] || {};
+                              return {
+                                ...prev,
+                                [targetId]: { ...targetData, [field.id]: newVal }
+                              };
+                            });
+                          }}
+                        />
                       );
                     })()}
 

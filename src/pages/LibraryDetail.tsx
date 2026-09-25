@@ -27,6 +27,11 @@ export function LibraryDetail() {
   const [newFieldSourceId, setNewFieldSourceId] = useState<string>('');
   const [newFieldMultiplier, setNewFieldMultiplier] = useState<number>(100);
   const [newFieldOffset, setNewFieldOffset] = useState<number>(0);
+  const [newFieldUnits, setNewFieldUnits] = useState<{ hours: boolean; minutes: boolean; seconds: boolean }>({
+    hours: false,
+    minutes: true,
+    seconds: true
+  });
 
   if (!template) {
     return <div className="p-8 text-center">Modèle introuvable.</div>;
@@ -61,6 +66,16 @@ export function LibraryDetail() {
     }
     if (newFieldType === 'time_mm_ss' || newFieldType === 'distance_speed') {
       options.targetDuration = (newFieldTargetMinutes * 60) + newFieldTargetSeconds;
+    }
+    if (newFieldType === 'time_duration') {
+      const selectedUnits = [];
+      if (newFieldUnits.hours) selectedUnits.push('hours');
+      if (newFieldUnits.minutes) selectedUnits.push('minutes');
+      if (newFieldUnits.seconds) selectedUnits.push('seconds');
+      options.units = selectedUnits.length > 0 ? selectedUnits : ['minutes', 'seconds'];
+      if (newFieldTargetMinutes > 0 || newFieldTargetSeconds > 0) {
+        options.targetDuration = (newFieldTargetMinutes * 60) + newFieldTargetSeconds;
+      }
     }
     if (newFieldType === 'calculated_target') {
       options.sourceFieldId = newFieldSourceId;
@@ -236,6 +251,74 @@ export function LibraryDetail() {
                       <p className="text-xs text-slate-500">
                         Sert à calculer {newFieldType === 'time_mm_ss' ? 'le % de temps réalisé' : 'la vitesse moyenne'}.
                       </p>
+                    </div>
+                  )}
+
+                  {newFieldType === 'time_duration' && (
+                    <div className="space-y-4 pt-3 border-t border-slate-200">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700">Unités de temps à saisir</label>
+                        <p className="text-xs text-slate-500">Choisissez les composants visibles lors de l'enregistrement :</p>
+                        <div className="flex flex-wrap gap-4 pt-1">
+                          <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer bg-white px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              checked={newFieldUnits.hours}
+                              onChange={e => setNewFieldUnits(prev => ({ ...prev, hours: e.target.checked }))}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>Heures (h)</span>
+                          </label>
+
+                          <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer bg-white px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              checked={newFieldUnits.minutes}
+                              onChange={e => setNewFieldUnits(prev => ({ ...prev, minutes: e.target.checked }))}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>Minutes (min)</span>
+                          </label>
+
+                          <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer bg-white px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              checked={newFieldUnits.seconds}
+                              onChange={e => setNewFieldUnits(prev => ({ ...prev, seconds: e.target.checked }))}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>Secondes (sec)</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700">Temps cible optionnel (Référence)</label>
+                        <div className="flex items-center gap-2">
+                          <Input 
+                            type="number"
+                            min={0}
+                            value={newFieldTargetMinutes}
+                            onChange={e => setNewFieldTargetMinutes(parseInt(e.target.value) || 0)}
+                            className="bg-white w-24"
+                            placeholder="Min"
+                          />
+                          <span className="text-slate-500 font-medium">min</span>
+                          <Input 
+                            type="number"
+                            min={0}
+                            max={59}
+                            value={newFieldTargetSeconds}
+                            onChange={e => setNewFieldTargetSeconds(parseInt(e.target.value) || 0)}
+                            className="bg-white w-24"
+                            placeholder="Sec"
+                          />
+                          <span className="text-slate-500 font-medium">sec</span>
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          Optionnel : permet de calculer le % d'atteinte de la cible ou le ratio chrono/cible.
+                        </p>
+                      </div>
                     </div>
                   )}
 

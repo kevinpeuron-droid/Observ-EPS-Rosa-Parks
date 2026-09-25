@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useStore } from '../store';
 import { ChevronLeft, Maximize, Activity, Star } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { formatTimeDuration } from '../components/TimeDurationInput';
 
 export function Project() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -60,7 +61,7 @@ export function Project() {
            const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
            aggregates[f.id] = latest.data[f.id] as number;
         }
-      } else if (f.type === 'time_mm_ss') {
+      } else if (f.type === 'time_mm_ss' || f.type === 'time_duration') {
         const validObs = obs.filter(o => o.data[f.id] !== undefined);
         if (validObs.length > 0) {
            const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
@@ -270,6 +271,31 @@ export function Project() {
                                  </span>
                                )}
                              </div>
+                          </div>
+                        </div>
+                      );
+                    } else if (field.type === 'time_duration' && aggregates[field.id]) {
+                      const time = aggregates[field.id];
+                      const totalSec = typeof time === 'number' 
+                        ? time 
+                        : (time.totalSeconds ?? ((time.hours || 0) * 3600 + (time.minutes || 0) * 60 + (time.seconds || 0)));
+                      const targetSeconds = field.options?.targetDuration;
+                      const percent = (targetSeconds && targetSeconds > 0 && totalSec > 0) ? Math.round((totalSec / targetSeconds) * 100) : null;
+
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400 font-medium">{field.label}</span>
+                            <div className="flex flex-col items-end">
+                              <span className="text-2xl sm:text-3xl font-bold font-mono text-emerald-400">
+                                {formatTimeDuration(time, field.options?.units)}
+                              </span>
+                              {percent !== null && totalSec > 0 && (
+                                <span className="text-sm text-indigo-400 font-bold mt-1">
+                                  Cible : {percent}%
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );

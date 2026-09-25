@@ -11,6 +11,7 @@ export const FIELD_TYPE_LABELS: Record<ObservationFieldType, string> = {
   speed_30s: 'Vitesse sur 30" (m -> km/h)',
   distance_speed: 'Distance + Temps cible (Vitesse moyenne)',
   time_mm_ss: 'Chrono + Temps cible (% Réussite)',
+  time_duration: 'Temps Chronométré (Heures, Minutes, Secondes au choix)',
   orienteering_star: 'Course en étoile (Chrono Balises)',
   training_log: 'Carnet Musculation (Séries/Reps/Charge)',
   project_target: 'Projet de performance (Cible vs Réel)',

@@ -4,6 +4,7 @@ import { useStore } from '../store';
 import { ChevronLeft, User, Activity as ActivityIcon, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { formatTimeDuration } from '../components/TimeDurationInput';
 
 export function StudentDetail() {
   const { studentId, classId } = useParams<{ studentId: string; classId: string }>();
@@ -83,6 +84,13 @@ export function StudentDetail() {
                             if (validObs.length > 0) {
                               const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
                               value = latest.data[field.id] as number;
+                            }
+                          } else if (field.type === 'time_duration' || field.type === 'time_mm_ss') {
+                            const validObs = sObs.filter(o => o.data[field.id] !== undefined);
+                            if (validObs.length > 0) {
+                              const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+                              const tVal = latest.data[field.id];
+                              value = formatTimeDuration(tVal, field.options?.units);
                             }
                           } else if (field.type === 'orienteering_star') {
                             const validObs = sObs.filter(o => o.data[field.id]);
