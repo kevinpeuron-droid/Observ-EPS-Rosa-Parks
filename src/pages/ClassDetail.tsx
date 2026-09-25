@@ -9,6 +9,7 @@ import { EditActivityModal } from '../components/EditActivityModal';
 import { SyncActivityModal } from '../components/SyncActivityModal';
 import { DeleteActivityModal } from '../components/DeleteActivityModal';
 import { Activity } from '../types';
+import { ClassPermanentStatsBanner } from '../components/ClassPermanentStatsBanner';
 
 export function ClassDetail() {
   const { classId } = useParams<{ classId: string }>();
@@ -216,6 +217,9 @@ export function ClassDetail() {
           </Button>
         </div>
       </div>
+
+      {/* Bannière permanente : Absences, Oublis de matériel, Assiduité */}
+      <ClassPermanentStatsBanner classId={classId} activeView="detail" />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Activités (Cycles) */}

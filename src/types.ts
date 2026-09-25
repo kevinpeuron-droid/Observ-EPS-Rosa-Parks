@@ -62,6 +62,9 @@ export type Session = {
   name: string;
   feedback: string;
   sheetId?: string; // The active observation sheet for this session
+  positiveStudentIds?: string[]; // Élèves très positifs pour le groupe
+  negativeStudentIds?: string[]; // Élèves très négatifs pour le groupe
+  studentImpactNotes?: Record<string, string>; // studentId -> note / tag explicatif
 };
 
 export type Activity = {

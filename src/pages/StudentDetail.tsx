@@ -26,6 +26,10 @@ export function StudentDetail() {
   const dispenseCount = studentObservations.filter(o => o.status === 'dispense' || (Object.values(o.data).length > 0 && Object.values(o.data).every(v => v === 'D'))).length;
   const noGearCount = studentObservations.filter(o => !!o.noGear).length;
 
+  // Compute group dynamic stats
+  const positiveCount = allSessions.filter(s => s.positiveStudentIds?.includes(studentId)).length;
+  const negativeCount = allSessions.filter(s => s.negativeStudentIds?.includes(studentId)).length;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 ease-out">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -62,6 +66,16 @@ export function StudentDetail() {
               <span>👟</span> {noGearCount} oubli(s) de matériel
             </div>
           )}
+          {positiveCount > 0 && (
+            <div className="px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+              <span>⭐</span> {positiveCount} fois très positif
+            </div>
+          )}
+          {negativeCount > 0 && (
+            <div className="px-3 py-1.5 rounded-xl bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1">
+              <span>⚠️</span> {negativeCount} point(s) de vigilance
+            </div>
+          )}
         </div>
       </div>
 
@@ -88,6 +102,9 @@ export function StudentDetail() {
                   const sessionIsAbsent = latestSObs?.status === 'absent' || (sObs.length > 0 && sObs.every(o => Object.values(o.data).length > 0 && Object.values(o.data).every(v => v === 'A')));
                   const sessionIsDispense = latestSObs?.status === 'dispense' || (sObs.length > 0 && sObs.every(o => Object.values(o.data).length > 0 && Object.values(o.data).every(v => v === 'D')));
                   const sessionNoGear = latestSObs?.noGear || false;
+                  const isPositive = session.positiveStudentIds?.includes(studentId);
+                  const isNegative = session.negativeStudentIds?.includes(studentId);
+                  const impactNote = session.studentImpactNotes?.[studentId];
 
                   const sheet = sheets.find(sh => sh.id === session.sheetId);
                   
@@ -101,6 +118,16 @@ export function StudentDetail() {
                         </div>
                         
                         <div className="flex flex-wrap gap-1.5">
+                          {isPositive && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                              <span>⭐</span> Très positif {impactNote ? `(${impactNote})` : ''}
+                            </span>
+                          )}
+                          {isNegative && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1">
+                              <span>⚠️</span> Point de vigilance {impactNote ? `(${impactNote})` : ''}
+                            </span>
+                          )}
                           {sessionIsAbsent && (
                             <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
                               ABSENT (A)
