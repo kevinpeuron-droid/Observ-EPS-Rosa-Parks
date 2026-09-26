@@ -11,7 +11,14 @@ import {
   UserX, 
   ShieldAlert, 
   RotateCcw,
-  AlertCircle
+  AlertCircle,
+  Search,
+  X,
+  ChevronRight,
+  ChevronLeft,
+  Check,
+  Users,
+  MessageSquareQuote
 } from 'lucide-react';
 import { OrienteeringStar } from '../components/OrienteeringStar';
 import { TrainingLog } from '../components/TrainingLog';
@@ -63,6 +70,12 @@ export function Observe() {
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [isObserving, setIsObserving] = useState(false);
   
+  // Active student index when multiple students are observed
+  const [activeTargetIndex, setActiveTargetIndex] = useState(0);
+
+  // Search filter for student selection
+  const [studentSearch, setStudentSearch] = useState('');
+  
   // Data per target and field
   const [data, setData] = useState<Record<string, Record<string, any>>>({});
   // Attendance status per student: 'present' | 'absent' | 'dispense'
@@ -73,6 +86,18 @@ export function Observe() {
   const [bilans, setBilans] = useState<Record<string, string>>({});
   const [perspectives, setPerspectives] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+
+  // Quick feedback tags for Bilan
+  const QUICK_BILAN_TAGS = [
+    'Très bon engagement',
+    'Consignes respectées',
+    'Progrès technique',
+    'Effort régulier',
+    'Bonne écoute',
+    'Attention sécurité',
+    'Rythme à adapter',
+    'Régularité à stabiliser'
+  ];
 
   // Sync with existing recorded observations for this session
   useEffect(() => {
@@ -176,14 +201,13 @@ export function Observe() {
     );
   }
 
-  // Handle setting student-level attendance status
+  // Handlers for attendance
   const handleSetStudentStatus = (targetId: string, status: StudentSessionStatus) => {
     setStudentStatus(prev => ({
       ...prev,
       [targetId]: status
     }));
 
-    // If absent or dispensé, optionally prefill empty fields
     if (status === 'absent' || status === 'dispense') {
       const code = status === 'absent' ? 'A' : 'D';
       setData(prev => {
@@ -199,7 +223,6 @@ export function Observe() {
         };
       });
     } else if (status === 'present') {
-      // Revert any fields that were 'A' or 'D' back to empty
       setData(prev => {
         const currentTargetData = { ...(prev[targetId] || {}) };
         (sheet.fields || []).forEach(f => {
@@ -286,16 +309,41 @@ export function Observe() {
     }));
   };
 
-  const handleToggle = (targetId: string, fieldId: string) => {
+  const handleQuickNudgeNumber = (targetId: string, fieldId: string, delta: number) => {
+    setData(prev => {
+      const targetData = prev[targetId] || {};
+      const current = targetData[fieldId];
+      const baseNum = typeof current === 'number' ? current : 0;
+      const nextVal = Math.max(0, Math.round((baseNum + delta) * 10) / 10);
+      return {
+        ...prev,
+        [targetId]: {
+          ...targetData,
+          [fieldId]: nextVal
+        }
+      };
+    });
+  };
+
+  const handleSetBoolean = (targetId: string, fieldId: string, val: boolean) => {
     setData(prev => {
       const targetData = prev[targetId] || {};
       return {
         ...prev,
         [targetId]: {
           ...targetData,
-          [fieldId]: !targetData[fieldId]
+          [fieldId]: val
         }
       };
+    });
+  };
+
+  const handleAddBilanTag = (targetId: string, tag: string) => {
+    setBilans(prev => {
+      const current = prev[targetId] || '';
+      if (!current.trim()) return { ...prev, [targetId]: tag };
+      if (current.includes(tag)) return prev;
+      return { ...prev, [targetId]: `${current}. ${tag}` };
     });
   };
 
@@ -326,784 +374,931 @@ export function Observe() {
       setPerspectives({});
       setSelectedTargets([]);
       setIsObserving(false);
+      setActiveTargetIndex(0);
     }, 1800);
   };
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-emerald-600 text-white flex flex-col items-center justify-center p-4 animate-in zoom-in duration-300">
-        <CheckCircle2 className="w-24 h-24 mb-4" />
-        <h1 className="text-3xl font-bold text-center">Observation enregistrée !</h1>
+      <div className="min-h-screen bg-emerald-600 text-white flex flex-col items-center justify-center p-6 animate-in zoom-in duration-300 text-center">
+        <CheckCircle2 className="w-20 h-20 mb-4 stroke-[2.5]" />
+        <h1 className="text-3xl font-extrabold tracking-tight">Observation enregistrée !</h1>
+        <p className="text-emerald-100 text-sm mt-2">Merci. Les données sont synchronisées en temps réel.</p>
       </div>
     );
   }
 
-  // Target selection screen
+  // Filtered lists for selection
+  const filteredStudents = (cls.students || []).filter(s => 
+    s.name.toLowerCase().includes(studentSearch.toLowerCase())
+  );
+  const filteredTeams = (cls.teams || []).filter(t =>
+    t.name.toLowerCase().includes(studentSearch.toLowerCase())
+  );
+
+  // STEP 1: TARGET SELECTION SCREEN (HIGHLY OPTIMIZED FOR MOBILE)
   if (!isObserving) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col">
-        <header className="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="font-bold text-lg">{sheet.name}</h1>
-              {activitySheets.length > 1 && (
-                <span className="text-[10px] bg-blue-700 text-blue-200 px-2 py-0.5 rounded-full font-semibold">
-                  {activitySheets.length} situations
-                </span>
-              )}
+      <div className="min-h-screen bg-slate-50 flex flex-col pb-24">
+        {/* Sticky Mobile Header */}
+        <header className="bg-indigo-600 text-white px-4 py-3.5 shadow-sm sticky top-0 z-30">
+          <div className="max-w-lg mx-auto flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 text-indigo-200 text-[11px] font-semibold">
+                <span>{cls.name}</span>
+                <span>•</span>
+                <span className="truncate">{session.name}</span>
+              </div>
+              <h1 className="font-bold text-base text-white truncate">{sheet.name}</h1>
             </div>
-            <p className="text-blue-100 text-xs">{cls.name} • {session.name} ({activity.name})</p>
-          </div>
 
-          {activitySheets.length > 1 && (
-            <div className="flex items-center gap-2 bg-blue-700/80 p-1 rounded-xl self-start sm:self-center">
-              <label className="text-[11px] font-bold text-blue-200 pl-2">Situation :</label>
+            {activitySheets.length > 1 && (
               <select
                 value={sheet.id}
                 onChange={e => setSelectedSheetId(e.target.value)}
-                className="bg-white text-slate-900 text-xs font-bold rounded-lg px-2.5 py-1 focus:outline-none"
+                className="bg-indigo-700/90 text-white text-xs font-bold rounded-xl px-2.5 py-1.5 border border-indigo-500/40 focus:outline-none shrink-0"
               >
                 {activitySheets.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
+                  <option key={s.id} value={s.id} className="text-slate-900 bg-white">
+                    {s.name}
+                  </option>
                 ))}
               </select>
-            </div>
-          )}
+            )}
+          </div>
         </header>
 
-        <main className="flex-1 p-4 max-w-lg mx-auto w-full space-y-6">
-          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-            <label className="block text-sm font-bold text-slate-800 mb-4">
-              {sheet.isMultiStudent ? 'Qui observez-vous ? (Sélectionnez les élèves)' : 'Qui observez-vous ?'}
-            </label>
-            
-            {sheet.isMultiStudent ? (
-              <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-                {cls.teams && cls.teams.length > 0 && (
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Équipes</h3>
-                    <div className="space-y-2">
-                      {cls.teams.map(t => (
-                        <label key={t.id} className="flex items-center p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-600 mr-3"
-                            checked={selectedTargets.includes(t.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedTargets(prev => [...prev, t.id]);
-                              } else {
-                                setSelectedTargets(prev => prev.filter(id => id !== t.id));
-                              }
-                            }}
-                          />
-                          <span className="font-bold text-slate-800">Équipe : {t.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
+        {/* Main Selection Area */}
+        <main className="flex-1 p-4 max-w-lg mx-auto w-full space-y-4">
+          <div className="bg-white p-4 rounded-2xl shadow-xs border border-slate-200 space-y-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                {sheet.isMultiStudent ? 'Qui observez-vous ?' : 'Sélectionnez l\'élève à observer'}
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {sheet.isMultiStudent 
+                  ? 'Cochez un ou plusieurs élèves ou équipes pour cet atelier.' 
+                  : 'Touchez le nom de l\'élève pour lancer la saisie.'}
+              </p>
+            </div>
 
-                <div>
-                  <h3 className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Élèves</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {cls.students.map(s => (
-                      <label key={s.id} className="flex items-center p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-600 mr-3"
-                          checked={selectedTargets.includes(s.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedTargets(prev => [...prev, s.id]);
-                            } else {
-                              setSelectedTargets(prev => prev.filter(id => id !== s.id));
-                            }
-                          }}
-                        />
-                        <span className="font-medium text-slate-800 text-sm truncate">{s.name}</span>
-                      </label>
-                    ))}
-                  </div>
+            {/* Instant Search Bar */}
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={studentSearch}
+                onChange={e => setStudentSearch(e.target.value)}
+                placeholder="Rechercher un prénom ou nom..."
+                className="w-full h-11 pl-10 pr-9 rounded-xl border border-slate-200 bg-slate-50 text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              />
+              {studentSearch && (
+                <button
+                  type="button"
+                  onClick={() => setStudentSearch('')}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 p-0.5"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Multi-student Quick action bar */}
+            {sheet.isMultiStudent && (
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs font-bold text-slate-600">
+                  {selectedTargets.length} sélectionné(s)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allIds = [
+                        ...(cls.teams || []).map(t => t.id),
+                        ...(cls.students || []).map(s => s.id)
+                      ];
+                      setSelectedTargets(allIds);
+                    }}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded-lg bg-indigo-50"
+                  >
+                    Tout cocher
+                  </button>
+                  {selectedTargets.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTargets([])}
+                      className="text-xs font-semibold text-slate-500 hover:text-slate-700 px-2 py-1 rounded-lg bg-slate-100"
+                    >
+                      Effacer
+                    </button>
+                  )}
                 </div>
               </div>
-            ) : (
-              <select 
-                className="w-full h-14 rounded-xl border-2 border-slate-200 bg-white px-4 text-base font-semibold text-slate-800 focus:border-blue-600 focus:outline-none"
-                value={selectedTargets[0] || ''}
-                onChange={(e) => setSelectedTargets(e.target.value ? [e.target.value] : [])}
-              >
-                <option value="">-- Choisir un élève ou une équipe --</option>
-                {cls.teams && cls.teams.length > 0 && (
-                  <optgroup label="Équipes">
-                    {cls.teams.map(t => (
-                      <option key={t.id} value={t.id}>Équipe : {t.name}</option>
-                    ))}
-                  </optgroup>
-                )}
-                <optgroup label="Élèves">
-                  {cls.students.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </optgroup>
-              </select>
             )}
 
-            <Button 
-              size="lg" 
-              className="w-full mt-6 h-14 text-base font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md"
-              disabled={selectedTargets.length === 0}
-              onClick={() => setIsObserving(true)}
-            >
-              Commencer l'observation ({selectedTargets.length})
-            </Button>
+            {/* Touch-Friendly Student List / Grid */}
+            <div className="space-y-2 max-h-[58vh] overflow-y-auto pr-1">
+              {/* Teams list */}
+              {filteredTeams.length > 0 && (
+                <div className="space-y-1.5 pb-2">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 block px-1">
+                    Équipes ({filteredTeams.length})
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {filteredTeams.map(t => {
+                      const isSelected = selectedTargets.includes(t.id);
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            if (sheet.isMultiStudent) {
+                              setSelectedTargets(prev => 
+                                isSelected ? prev.filter(id => id !== t.id) : [...prev, t.id]
+                              );
+                            } else {
+                              setSelectedTargets([t.id]);
+                            }
+                          }}
+                          className={`w-full flex items-center justify-between p-3.5 rounded-xl border text-left transition-all active:scale-[0.98] min-h-[52px] ${
+                            isSelected
+                              ? 'bg-indigo-50 border-indigo-600 text-indigo-950 font-bold shadow-xs'
+                              : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                              isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              ÉQ
+                            </div>
+                            <span className="text-sm font-bold truncate">Équipe : {t.name}</span>
+                          </div>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center border transition-all ${
+                            isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'
+                          }`}>
+                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Students list */}
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 block px-1 pt-1">
+                Élèves ({filteredStudents.length})
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {filteredStudents.map((s) => {
+                  const isSelected = selectedTargets.includes(s.id);
+                  const initial = s.name.charAt(0).toUpperCase();
+
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        if (sheet.isMultiStudent) {
+                          setSelectedTargets(prev => 
+                            isSelected ? prev.filter(id => id !== s.id) : [...prev, s.id]
+                          );
+                        } else {
+                          setSelectedTargets([s.id]);
+                        }
+                      }}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all active:scale-[0.98] min-h-[52px] ${
+                        isSelected
+                          ? 'bg-indigo-50 border-indigo-600 text-indigo-950 font-bold shadow-xs ring-1 ring-indigo-600'
+                          : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                          isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {initial}
+                        </div>
+                        <span className="text-sm truncate font-semibold">{s.name}</span>
+                      </div>
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center border shrink-0 transition-all ${
+                        isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'
+                      }`}>
+                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
+                    </button>
+                  );
+                })}
+
+                {filteredStudents.length === 0 && (
+                  <div className="p-6 text-center text-xs text-slate-500">
+                    Aucun élève trouvé pour « {studentSearch} ».
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </main>
+
+        {/* Sticky Thumb-Zone Action Bar */}
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 shadow-lg">
+          <div className="max-w-lg mx-auto">
+            <Button
+              size="lg"
+              disabled={selectedTargets.length === 0}
+              onClick={() => {
+                setActiveTargetIndex(0);
+                setIsObserving(true);
+              }}
+              className="w-full h-13 text-base font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md disabled:opacity-40 flex items-center justify-center gap-2"
+            >
+              <span>Commencer l'observation</span>
+              {selectedTargets.length > 0 && (
+                <span className="bg-indigo-500 text-white px-2 py-0.5 rounded-full text-xs">
+                  {selectedTargets.length}
+                </span>
+              )}
+              <ChevronRight className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
 
-  // Active observation form
+  // STEP 2: ACTIVE OBSERVATION SCREEN (TOUCH-OPTIMIZED FORM)
+  const currentTargetId = selectedTargets[activeTargetIndex] || selectedTargets[0];
+  const student = cls.students.find(s => s.id === currentTargetId);
+  const team = cls.teams?.find(t => t.id === currentTargetId);
+  const targetName = student?.name || (team ? `Équipe : ${team.name}` : 'Inconnu');
+  const studentData = data[currentTargetId] || {};
+  const currentStatus = studentStatus[currentTargetId] || 'present';
+  const hasNoGear = !!studentNoGear[currentTargetId];
+
+  // Count answered fields for this student
+  const answeredFieldsCount = (sheet.fields || []).filter(f => {
+    const val = studentData[f.id];
+    return val !== undefined && val !== '' && val !== null;
+  }).length;
+  const totalFields = (sheet.fields || []).length;
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <header className="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center justify-between w-full sm:w-auto">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="font-bold text-lg">{sheet.name}</h1>
-              {activitySheets.length > 1 && (
-                <span className="text-[10px] bg-blue-700 text-blue-200 px-2 py-0.5 rounded-full font-semibold">
-                  {activitySheets.length} situations
-                </span>
-              )}
-            </div>
-            <p className="text-blue-100 text-xs">{cls.name} • {session.name} ({activity.name})</p>
+    <div className="min-h-screen bg-slate-100 flex flex-col pb-28">
+      {/* Sticky Mobile Header */}
+      <header className="bg-indigo-600 text-white px-4 py-3 shadow-sm sticky top-0 z-30">
+        <div className="max-w-2xl mx-auto flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <span className="text-[11px] text-indigo-200 font-semibold block truncate">
+              {cls.name} • {session.name}
+            </span>
+            <h1 className="font-bold text-base text-white truncate">{sheet.name}</h1>
           </div>
-          <button 
-            onClick={() => setIsObserving(false)} 
-            className="sm:hidden text-blue-100 hover:text-white text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-700/60"
+
+          <button
+            type="button"
+            onClick={() => setIsObserving(false)}
+            className="text-xs font-bold text-indigo-100 bg-indigo-700 hover:bg-indigo-800 px-3 py-1.5 rounded-xl border border-indigo-500/40 shrink-0"
           >
             Changer élèves
           </button>
         </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-center">
-          {activitySheets.length > 1 && (
-            <div className="flex items-center gap-1.5 bg-blue-700/80 p-1 rounded-xl">
-              <label className="text-[11px] font-bold text-blue-200 pl-1.5">Situation :</label>
-              <select
-                value={sheet.id}
-                onChange={e => setSelectedSheetId(e.target.value)}
-                className="bg-white text-slate-900 text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"
-              >
-                {activitySheets.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          <button 
-            onClick={() => setIsObserving(false)} 
-            className="hidden sm:inline-flex text-blue-100 hover:text-white text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-700/60 transition-colors"
-          >
-            Changer élèves
-          </button>
-        </div>
+        {/* Multi-student Horizontal Thumb-Switcher Tabs */}
+        {selectedTargets.length > 1 && (
+          <div className="max-w-2xl mx-auto mt-2 pt-2 border-t border-indigo-500/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+            {selectedTargets.map((id, idx) => {
+              const st = cls.students.find(s => s.id === id);
+              const tm = cls.teams?.find(t => t.id === id);
+              const name = st?.name.split(' ')[0] || tm?.name || `Élève ${idx + 1}`;
+              const isSelected = idx === activeTargetIndex;
+              const targetAnswered = (sheet.fields || []).filter(f => (data[id] || {})[f.id] !== undefined).length;
+              const isComplete = totalFields > 0 && targetAnswered >= totalFields;
+
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setActiveTargetIndex(idx)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition-all shrink-0 ${
+                    isSelected
+                      ? 'bg-white text-indigo-900 shadow-sm'
+                      : 'bg-indigo-700/60 text-indigo-100 hover:bg-indigo-700'
+                  }`}
+                >
+                  <span>{name}</span>
+                  {isComplete ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 fill-emerald-100" />
+                  ) : targetAnswered > 0 ? (
+                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </header>
 
-      <main className="flex-1 p-4 max-w-2xl mx-auto w-full space-y-6">
-        {selectedTargets.map(targetId => {
-          const student = cls.students.find(s => s.id === targetId);
-          const team = cls.teams?.find(t => t.id === targetId);
-          const targetName = student?.name || (team ? `Équipe : ${team.name}` : 'Inconnu');
-          const studentData = data[targetId] || {};
-          const currentStatus = studentStatus[targetId] || 'present';
-          const hasNoGear = !!studentNoGear[targetId];
-          
-          return (
-            <div key={targetId} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-5 relative overflow-hidden">
-              {/* Target Header */}
-              <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-bold text-slate-800">{targetName}</h2>
-                  <p className="text-xs text-slate-400">Relevé de séance</p>
-                </div>
-
-                {/* Attendance & Equipment status bar */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex rounded-xl p-1 bg-slate-100 border border-slate-200 text-xs font-semibold">
-                    <button
-                      type="button"
-                      onClick={() => handleSetStudentStatus(targetId, 'present')}
-                      className={`px-2.5 py-1 rounded-lg transition-all ${
-                        currentStatus === 'present'
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      Présent
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSetStudentStatus(targetId, 'absent')}
-                      className={`px-2.5 py-1 rounded-lg transition-all ${
-                        currentStatus === 'absent'
-                          ? 'bg-red-600 text-white shadow-xs'
-                          : 'text-slate-600 hover:text-red-700'
-                      }`}
-                      title="Marquer comme Absent (A)"
-                    >
-                      Absent (A)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSetStudentStatus(targetId, 'dispense')}
-                      className={`px-2.5 py-1 rounded-lg transition-all ${
-                        currentStatus === 'dispense'
-                          ? 'bg-amber-600 text-white shadow-xs'
-                          : 'text-slate-600 hover:text-amber-700'
-                      }`}
-                      title="Marquer comme Dispensé (D)"
-                    >
-                      Dispensé (D)
-                    </button>
-                  </div>
-
-                  {/* Gear toggle */}
-                  <label 
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-colors ${
-                      hasNoGear 
-                        ? 'bg-rose-100 border-rose-300 text-rose-800' 
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={hasNoGear}
-                      onChange={() => handleToggleNoGear(targetId)}
-                      className="rounded text-rose-600 focus:ring-rose-500 w-3.5 h-3.5"
-                    />
-                    <span>Sans matériel</span>
-                  </label>
-                </div>
+      {/* Main Single-Student Active View */}
+      <main className="flex-1 p-3 sm:p-4 max-w-2xl mx-auto w-full space-y-4">
+        {/* Student Profile & Attendance Card */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-extrabold text-sm shrink-0">
+                {targetName.charAt(0).toUpperCase()}
               </div>
-
-              {/* Status Alert notice if not present */}
-              {currentStatus === 'absent' && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between text-xs text-red-800">
-                  <div className="flex items-center gap-2">
-                    <UserX className="w-4 h-4 text-red-600" />
-                    <span>Élève noté <strong>ABSENT (A)</strong> pour cette séance.</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const updated = { ...(data[targetId] || {}) };
-                      (sheet.fields || []).forEach(f => { updated[f.id] = 'A'; });
-                      setData(prev => ({ ...prev, [targetId]: updated }));
-                    }}
-                    className="font-bold underline text-red-700 hover:text-red-900"
-                  >
-                    Remplir tous les critères avec 'A'
-                  </button>
-                </div>
-              )}
-
-              {currentStatus === 'dispense' && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-800">
-                  <div className="flex items-center gap-2">
-                    <ShieldAlert className="w-4 h-4 text-amber-600" />
-                    <span>Élève noté <strong>DISPENSÉ (D)</strong> médicalement.</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const updated = { ...(data[targetId] || {}) };
-                      (sheet.fields || []).forEach(f => { updated[f.id] = 'D'; });
-                      setData(prev => ({ ...prev, [targetId]: updated }));
-                    }}
-                    className="font-bold underline text-amber-700 hover:text-amber-900"
-                  >
-                    Remplir tous les critères avec 'D'
-                  </button>
-                </div>
-              )}
-
-              {/* Observation Fields */}
-              <div className="space-y-6">
-                {(sheet.fields || []).length === 0 ? (
-                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-500">
-                    Cette situation ne contient pas encore de critères. Vous pouvez noter la présence et le bilan ci-dessous.
-                  </div>
-                ) : (
-                  (sheet.fields || []).map(field => {
-                  const val = studentData[field.id];
-                  const isA = val === 'A' || val === 'a';
-                  const isD = val === 'D' || val === 'd';
-
-                  return (
-                    <div key={field.id} className="flex flex-col gap-2 p-3 bg-slate-50/70 rounded-xl border border-slate-100">
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold text-slate-800 text-sm">{field.label}</div>
-                        
-                        {/* Quick A and D buttons for EVERY field */}
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleSetFieldCode(targetId, field.id, 'A')}
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors ${
-                              isA 
-                                ? 'bg-red-600 text-white border-red-600 shadow-xs' 
-                                : 'bg-white text-slate-500 border-slate-200 hover:border-red-300 hover:text-red-600'
-                            }`}
-                            title="Absent sur ce critère"
-                          >
-                            A
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSetFieldCode(targetId, field.id, 'D')}
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors ${
-                              isD 
-                                ? 'bg-amber-600 text-white border-amber-600 shadow-xs' 
-                                : 'bg-white text-slate-500 border-slate-200 hover:border-amber-300 hover:text-amber-600'
-                            }`}
-                            title="Dispensé sur ce critère"
-                          >
-                            D
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Display special badge if A or D */}
-                      {isA ? (
-                        <div className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 font-bold text-sm">
-                          <span className="flex items-center gap-2">
-                            <UserX className="w-4 h-4 text-red-600" />
-                            ABSENT (A)
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleSetFieldCode(targetId, field.id, 'A')}
-                            className="text-xs font-normal underline text-red-600 hover:text-red-800"
-                          >
-                            Annuler
-                          </button>
-                        </div>
-                      ) : isD ? (
-                        <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 font-bold text-sm">
-                          <span className="flex items-center gap-2">
-                            <ShieldAlert className="w-4 h-4 text-amber-600" />
-                            DISPENSÉ (D)
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleSetFieldCode(targetId, field.id, 'D')}
-                            className="text-xs font-normal underline text-amber-600 hover:text-amber-800"
-                          >
-                            Annuler
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          {/* Standard field controls */}
-                          {field.type === 'counter' && (
-                            <div className="flex items-center justify-between gap-4 bg-white p-2 rounded-xl border border-slate-200">
-                              <button 
-                                onClick={() => handleCounterChange(targetId, field.id, -1)}
-                                className="w-14 h-14 rounded-full bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center active:bg-slate-200 touch-manipulation shadow-xs"
-                              >
-                                <Minus className="w-7 h-7" />
-                              </button>
-                              <div className="text-3xl font-bold font-mono text-slate-800">
-                                {typeof studentData[field.id] === 'number' ? studentData[field.id] : 0}
-                              </div>
-                              <button 
-                                onClick={() => handleCounterChange(targetId, field.id, 1)}
-                                className="w-14 h-14 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center active:bg-blue-200 touch-manipulation shadow-xs"
-                              >
-                                <Plus className="w-7 h-7" />
-                              </button>
-                            </div>
-                          )}
-
-                          {field.type === 'boolean' && (
-                            <button
-                              onClick={() => handleToggle(targetId, field.id)}
-                              className={`w-full py-3.5 rounded-xl font-bold text-base transition-colors ${
-                                studentData[field.id] ? 'bg-emerald-500 text-white' : 'bg-white text-slate-600 border border-slate-200'
-                              }`}
-                            >
-                              {studentData[field.id] ? 'OUI (Validé)' : 'NON (Non validé)'}
-                            </button>
-                          )}
-
-                          {field.type === 'rating' && (
-                            <div className="flex items-center justify-center gap-2 h-14 bg-white rounded-xl border border-slate-200">
-                              {[1, 2, 3, 4, 5].map(star => (
-                                <button
-                                  key={star}
-                                  onClick={() => {
-                                    setData(prev => {
-                                      const targetData = prev[targetId] || {};
-                                      return {
-                                        ...prev,
-                                        [targetId]: { ...targetData, [field.id]: star }
-                                      };
-                                    });
-                                  }}
-                                  className="p-1.5 transition-transform hover:scale-110 focus:outline-none"
-                                >
-                                  <Star 
-                                    className={`w-8 h-8 ${
-                                      (studentData[field.id] as number || 0) >= star
-                                        ? 'fill-amber-400 text-amber-400' 
-                                        : 'fill-transparent text-slate-300'
-                                    }`} 
-                                  />
-                                </button>
-                              ))}
-                            </div>
-                          )}
-
-                          {field.type === 'calculated_target' && (() => {
-                            const sourceId = field.options?.sourceFieldId;
-                            const multiplier = field.options?.multiplier || 1;
-                            const offset = field.options?.offset || 0;
-                            
-                            const pastObs = observations
-                              .filter(o => o.targetId === targetId && o.sessionId !== session.id && o.data[sourceId] !== undefined)
-                              .sort((a, b) => b.timestamp - a.timestamp);
-                            
-                            const pastValue = pastObs.length > 0 ? (pastObs[0].data[sourceId] as number) : null;
-                            const targetValue = pastValue !== null ? (pastValue * multiplier) + offset : null;
-
-                            return (
-                              <div className="flex flex-col items-center gap-3">
-                                {targetValue !== null ? (
-                                  <div className="bg-indigo-50 text-indigo-800 px-4 py-2 rounded-lg font-bold w-full text-center border border-indigo-100 flex flex-col">
-                                    <span className="text-xs uppercase tracking-wider text-indigo-500 mb-1">Cible calculée</span>
-                                    <span className="text-2xl">{targetValue % 1 !== 0 ? targetValue.toFixed(1) : targetValue}</span>
-                                  </div>
-                                ) : (
-                                  <div className="bg-slate-50 text-slate-500 px-4 py-2 rounded-lg text-sm w-full text-center border border-slate-100">
-                                    Aucune donnée passée pour calculer la cible.
-                                  </div>
-                                )}
-                                <input 
-                                  type="text"
-                                  inputMode="decimal"
-                                  className="w-full h-14 text-center text-2xl font-bold font-mono rounded-xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none bg-white"
-                                  placeholder="Résultat final ou 'A' / 'D'..."
-                                  value={studentData[field.id] === undefined ? '' : studentData[field.id]}
-                                  onChange={(e) => handleNumberChange(targetId, field.id, e.target.value)}
-                                />
-                              </div>
-                            );
-                          })()}
-
-                          {field.type === 'number' && (
-                            <div className="flex flex-col items-center gap-2">
-                              <input 
-                                type="text"
-                                inputMode="decimal"
-                                className="w-full h-14 text-center text-2xl font-bold font-mono rounded-xl border-2 border-slate-200 focus:border-blue-600 focus:outline-none bg-white"
-                                placeholder="Saisir valeur ou 'A' / 'D'..."
-                                value={studentData[field.id] === undefined ? '' : studentData[field.id]}
-                                onChange={(e) => handleNumberChange(targetId, field.id, e.target.value)}
-                              />
-                            </div>
-                          )}
-
-                          {field.type === 'speed_30s' && (
-                            <div className="flex flex-col items-center gap-3">
-                              <div className="w-full relative">
-                                <input 
-                                  type="text"
-                                  inputMode="decimal"
-                                  className="w-full h-14 text-center text-2xl font-bold font-mono rounded-xl border-2 border-slate-200 focus:border-blue-600 focus:outline-none pr-12 bg-white"
-                                  placeholder="Distance (m) ou 'A' / 'D'"
-                                  value={studentData[field.id] === undefined ? '' : studentData[field.id]}
-                                  onChange={(e) => handleNumberChange(targetId, field.id, e.target.value)}
-                                />
-                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">m</span>
-                              </div>
-                              {typeof studentData[field.id] === 'number' && (
-                                <div className="bg-emerald-100 text-emerald-800 px-4 py-2 rounded-lg font-bold w-full text-center text-base">
-                                  Vitesse : {((studentData[field.id] as number) * 0.12).toFixed(1)} km/h
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {field.type === 'distance_speed' && (
-                            <div className="flex flex-col items-center gap-3">
-                              <div className="w-full relative">
-                                <input 
-                                  type="text"
-                                  inputMode="decimal"
-                                  className="w-full h-14 text-center text-2xl font-bold font-mono rounded-xl border-2 border-slate-200 focus:border-blue-600 focus:outline-none pr-12 bg-white"
-                                  placeholder="Distance (m) ou 'A' / 'D'"
-                                  value={studentData[field.id] === undefined ? '' : studentData[field.id]}
-                                  onChange={(e) => handleNumberChange(targetId, field.id, e.target.value)}
-                                />
-                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">m</span>
-                              </div>
-                              {typeof studentData[field.id] === 'number' && field.options?.targetDuration && (
-                                <div className="bg-emerald-100 text-emerald-800 px-4 py-2 rounded-lg font-bold w-full text-center text-base">
-                                  Vitesse : {(((studentData[field.id] as number) / field.options.targetDuration) * 3.6).toFixed(1)} km/h
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {field.type === 'time_mm_ss' && (() => {
-                            const timeVal = studentData[field.id];
-                            const currentSeconds = (typeof timeVal === 'object' && timeVal) ? (timeVal.minutes || 0) * 60 + (timeVal.seconds || 0) : 0;
-                            const targetSeconds = field.options?.targetDuration;
-                            const percent = targetSeconds ? Math.round((currentSeconds / targetSeconds) * 100) : null;
-                            
-                            return (
-                              <div className="flex flex-col gap-2">
-                                <TimeMmSs 
-                                  value={timeVal}
-                                  onChange={(newVal) => {
-                                    setData(prev => {
-                                      const targetData = prev[targetId] || {};
-                                      return {
-                                        ...prev,
-                                        [targetId]: { ...targetData, [field.id]: newVal }
-                                      };
-                                    });
-                                  }}
-                                />
-                                {percent !== null && currentSeconds > 0 && (
-                                  <div className="bg-indigo-100 text-indigo-800 px-4 py-2 rounded-lg font-bold w-full text-center text-sm mt-1">
-                                    Temps effectif : {percent}%
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-
-                          {field.type === 'time_duration' && (() => {
-                            const timeVal = studentData[field.id];
-                            const units = field.options?.units || ['minutes', 'seconds'];
-                            const targetSeconds = field.options?.targetDuration;
-
-                            return (
-                              <TimeDurationInput
-                                value={timeVal}
-                                units={units}
-                                targetDurationSeconds={targetSeconds}
-                                onChange={(newVal) => {
-                                  setData(prev => {
-                                    const targetData = prev[targetId] || {};
-                                    return {
-                                      ...prev,
-                                      [targetId]: { ...targetData, [field.id]: newVal }
-                                    };
-                                  });
-                                }}
-                              />
-                            );
-                          })()}
-
-                          {field.type === 'orienteering_star' && (
-                            <OrienteeringStar 
-                              baliseCount={field.options?.baliseCount || 10}
-                              value={studentData[field.id] || {}}
-                              onChange={(newVal) => {
-                                setData(prev => {
-                                  const targetData = prev[targetId] || {};
-                                  return {
-                                    ...prev,
-                                    [targetId]: { ...targetData, [field.id]: newVal }
-                                  };
-                                });
-                              }}
-                            />
-                          )}
-
-                          {field.type === 'training_log' && (
-                            <TrainingLog 
-                              value={studentData[field.id]}
-                              onChange={(newVal) => {
-                                setData(prev => {
-                                  const targetData = prev[targetId] || {};
-                                  return {
-                                    ...prev,
-                                    [targetId]: { ...targetData, [field.id]: newVal }
-                                  };
-                                });
-                              }}
-                            />
-                          )}
-
-                          {field.type === 'project_target' && (
-                            <ProjectTarget 
-                              value={studentData[field.id]}
-                              onChange={(newVal) => {
-                                setData(prev => {
-                                  const targetData = prev[targetId] || {};
-                                  return {
-                                    ...prev,
-                                    [targetId]: { ...targetData, [field.id]: newVal }
-                                  };
-                                });
-                              }}
-                            />
-                          )}
-
-                          {field.type === 'ratio_action' && (
-                            <RatioAction 
-                              value={studentData[field.id]}
-                              onChange={(newVal) => {
-                                setData(prev => {
-                                  const targetData = prev[targetId] || {};
-                                  return {
-                                    ...prev,
-                                    [targetId]: { ...targetData, [field.id]: newVal }
-                                  };
-                                });
-                              }}
-                            />
-                          )}
-
-                          {field.type === 'sequence_planner' && (
-                            <SequencePlanner 
-                              value={studentData[field.id]}
-                              onChange={(newVal) => {
-                                setData(prev => {
-                                  const targetData = prev[targetId] || {};
-                                  return {
-                                    ...prev,
-                                    [targetId]: { ...targetData, [field.id]: newVal }
-                                  };
-                                });
-                              }}
-                            />
-                          )}
-
-                          {field.type === 'performance_log' && (
-                            <PerformanceLog 
-                              value={studentData[field.id]}
-                              onChange={(newVal) => {
-                                setData(prev => {
-                                  const targetData = prev[targetId] || {};
-                                  return {
-                                    ...prev,
-                                    [targetId]: { ...targetData, [field.id]: newVal }
-                                  };
-                                });
-                              }}
-                            />
-                          )}
-
-                          {field.type === 'orienteering_log' && (
-                            <OrienteeringLog 
-                              value={studentData[field.id]}
-                              onChange={(newVal) => {
-                                setData(prev => {
-                                  const targetData = prev[targetId] || {};
-                                  return {
-                                    ...prev,
-                                    [targetId]: { ...targetData, [field.id]: newVal }
-                                  };
-                                });
-                              }}
-                            />
-                          )}
-
-                          {field.type === 'artistic_rating' && (
-                            <ArtisticRating 
-                              value={studentData[field.id]}
-                              onChange={(newVal) => {
-                                setData(prev => {
-                                  const targetData = prev[targetId] || {};
-                                  return {
-                                    ...prev,
-                                    [targetId]: { ...targetData, [field.id]: newVal }
-                                  };
-                                });
-                              }}
-                            />
-                          )}
-
-                          {field.type === 'match_stats' && (
-                            <MatchStats 
-                              value={studentData[field.id]}
-                              onChange={(newVal) => {
-                                setData(prev => {
-                                  const targetData = prev[targetId] || {};
-                                  return {
-                                    ...prev,
-                                    [targetId]: { ...targetData, [field.id]: newVal }
-                                  };
-                                });
-                              }}
-                            />
-                          )}
-
-                          {field.type === 'health_fitness_log' && (
-                            <HealthFitnessLog 
-                              value={studentData[field.id]}
-                              onChange={(newVal) => {
-                                setData(prev => {
-                                  const targetData = prev[targetId] || {};
-                                  return {
-                                    ...prev,
-                                    [targetId]: { ...targetData, [field.id]: newVal }
-                                  };
-                                });
-                              }}
-                            />
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
-                }))}
-
-                {/* Bilan and Perspectives */}
-                <div className="pt-6 space-y-4 border-t border-slate-100 mt-6">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">
-                      Bilan de l'observation
-                    </label>
-                    <textarea 
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs focus:bg-white focus:border-blue-600 focus:outline-none min-h-[80px]"
-                      placeholder="Analyse des réussites, progrès ou points à travailler..."
-                      value={bilans[targetId] || ''}
-                      onChange={e => setBilans(prev => ({ ...prev, [targetId]: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">
-                      Perspectives
-                    </label>
-                    <textarea 
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs focus:bg-white focus:border-blue-600 focus:outline-none min-h-[80px]"
-                      placeholder="Objectifs pour la prochaine séance..."
-                      value={perspectives[targetId] || ''}
-                      onChange={e => setPerspectives(prev => ({ ...prev, [targetId]: e.target.value }))}
-                    />
-                  </div>
-                </div>
-
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 leading-tight">{targetName}</h2>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  Critères complétés : <strong>{answeredFieldsCount} / {totalFields}</strong>
+                </span>
               </div>
             </div>
-          );
-        })}
 
-        <Button 
-          size="lg" 
-          className="w-full h-16 text-base font-bold rounded-xl shadow-lg mt-6 mb-12 bg-emerald-600 hover:bg-emerald-700 text-white"
-          onClick={handleSubmit}
-        >
-          Valider et enregistrer {selectedTargets.length > 1 ? `(${selectedTargets.length} observations)` : ''}
-        </Button>
+            {selectedTargets.length > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={activeTargetIndex === 0}
+                  onClick={() => setActiveTargetIndex(prev => Math.max(0, prev - 1))}
+                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 flex items-center justify-center text-slate-700"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-xs font-bold text-slate-600 px-1">
+                  {activeTargetIndex + 1}/{selectedTargets.length}
+                </span>
+                <button
+                  type="button"
+                  disabled={activeTargetIndex >= selectedTargets.length - 1}
+                  onClick={() => setActiveTargetIndex(prev => Math.min(selectedTargets.length - 1, prev + 1))}
+                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 flex items-center justify-center text-slate-700"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Large Thumb-Friendly Attendance Controls */}
+          <div className="grid grid-cols-4 gap-1.5 pt-1">
+            <button
+              type="button"
+              onClick={() => handleSetStudentStatus(currentTargetId, 'present')}
+              className={`py-2 px-1 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-0.5 border transition-all active:scale-95 ${
+                currentStatus === 'present'
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <span>Présent</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSetStudentStatus(currentTargetId, 'absent')}
+              className={`py-2 px-1 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-0.5 border transition-all active:scale-95 ${
+                currentStatus === 'absent'
+                  ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <span>Absent (A)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSetStudentStatus(currentTargetId, 'dispense')}
+              className={`py-2 px-1 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-0.5 border transition-all active:scale-95 ${
+                currentStatus === 'dispense'
+                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <span>Dispensé (D)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleToggleNoGear(currentTargetId)}
+              className={`py-2 px-1 rounded-xl text-[11px] font-bold flex flex-col items-center justify-center gap-0.5 border transition-all active:scale-95 ${
+                hasNoGear
+                  ? 'bg-rose-100 text-rose-800 border-rose-300 shadow-xs'
+                  : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <span>👟 Sans tenue</span>
+            </button>
+          </div>
+
+          {/* Quick Notice if Absent or Dispensé */}
+          {currentStatus === 'absent' && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between text-xs text-red-800">
+              <span className="font-semibold">Élève noté ABSENT (A) pour la séance</span>
+              <button
+                type="button"
+                onClick={() => handleSetStudentStatus(currentTargetId, 'present')}
+                className="font-bold underline text-red-700 hover:text-red-900"
+              >
+                Rétablir Présent
+              </button>
+            </div>
+          )}
+          {currentStatus === 'dispense' && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-800">
+              <span className="font-semibold">Élève noté DISPENSÉ (D)</span>
+              <button
+                type="button"
+                onClick={() => handleSetStudentStatus(currentTargetId, 'present')}
+                className="font-bold underline text-amber-700 hover:text-amber-900"
+              >
+                Rétablir Présent
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Observation Criteria Fields (Touch-Optimized) */}
+        <div className="space-y-3">
+          {(sheet.fields || []).map(field => {
+            const val = studentData[field.id];
+            const isA = val === 'A' || val === 'a';
+            const isD = val === 'D' || val === 'd';
+
+            return (
+              <div 
+                key={field.id}
+                className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3"
+              >
+                {/* Field Header */}
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 leading-snug">{field.label}</h3>
+                    {field.options?.units && (
+                      <span className="text-[11px] font-mono text-slate-400">
+                        Unité : {field.options.units}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Quick A and D tags */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleSetFieldCode(currentTargetId, field.id, 'A')}
+                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-colors ${
+                        isA 
+                          ? 'bg-red-600 text-white border-red-600' 
+                          : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-red-600'
+                      }`}
+                    >
+                      A
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetFieldCode(currentTargetId, field.id, 'D')}
+                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-colors ${
+                        isD 
+                          ? 'bg-amber-600 text-white border-amber-600' 
+                          : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-amber-600'
+                      }`}
+                    >
+                      D
+                    </button>
+                  </div>
+                </div>
+
+                {/* State: Absent or Dispense in this field */}
+                {isA ? (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between text-xs font-bold text-red-700">
+                    <span>ABSENT (A) SUR CE CRITÈRE</span>
+                    <button
+                      type="button"
+                      onClick={() => handleSetFieldCode(currentTargetId, field.id, 'A')}
+                      className="text-red-500 underline text-[11px] font-semibold"
+                    >
+                      Effacer
+                    </button>
+                  </div>
+                ) : isD ? (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs font-bold text-amber-700">
+                    <span>DISPENSÉ (D) SUR CE CRITÈRE</span>
+                    <button
+                      type="button"
+                      onClick={() => handleSetFieldCode(currentTargetId, field.id, 'D')}
+                      className="text-amber-500 underline text-[11px] font-semibold"
+                    >
+                      Effacer
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    {/* TYPE: COUNTER */}
+                    {field.type === 'counter' && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => handleCounterChange(currentTargetId, field.id, -1)}
+                            className="w-14 h-14 rounded-xl bg-white border border-slate-200 text-slate-700 font-extrabold text-2xl flex items-center justify-center active:scale-90 active:bg-slate-100 transition-all shadow-xs shrink-0"
+                          >
+                            <Minus className="w-6 h-6 stroke-[3]" />
+                          </button>
+                          
+                          <div className="text-3xl font-extrabold font-mono text-slate-900 tracking-tight text-center">
+                            {typeof val === 'number' ? val : 0}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleCounterChange(currentTargetId, field.id, 1)}
+                            className="w-14 h-14 rounded-xl bg-indigo-600 text-white font-extrabold text-2xl flex items-center justify-center active:scale-90 active:bg-indigo-700 transition-all shadow-md shrink-0"
+                          >
+                            <Plus className="w-6 h-6 stroke-[3]" />
+                          </button>
+                        </div>
+
+                        {/* Quick increment chips */}
+                        <div className="flex items-center justify-center gap-1.5 pt-0.5">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase mr-1">Raccourcis :</span>
+                          {[1, 2, 5].map(step => (
+                            <button
+                              key={step}
+                              type="button"
+                              onClick={() => handleCounterChange(currentTargetId, field.id, step)}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-colors active:scale-95 border border-indigo-200/60"
+                            >
+                              +{step}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* TYPE: BOOLEAN */}
+                    {field.type === 'boolean' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSetBoolean(currentTargetId, field.id, false)}
+                          className={`h-12 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all active:scale-95 ${
+                            val === false
+                              ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <X className="w-4 h-4 stroke-[2.5]" />
+                          <span>Non validé</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSetBoolean(currentTargetId, field.id, true)}
+                          className={`h-12 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all active:scale-95 ${
+                            val === true
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <Check className="w-4 h-4 stroke-[3]" />
+                          <span>Validé (OUI)</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* TYPE: RATING (1-5) */}
+                    {field.type === 'rating' && (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {[1, 2, 3, 4, 5].map(starNum => {
+                            const isChosen = Number(val) >= starNum;
+                            return (
+                              <button
+                                key={starNum}
+                                type="button"
+                                onClick={() => {
+                                  setData(prev => ({
+                                    ...prev,
+                                    [currentTargetId]: {
+                                      ...(prev[currentTargetId] || {}),
+                                      [field.id]: starNum
+                                    }
+                                  }));
+                                }}
+                                className={`h-14 rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
+                                  isChosen
+                                    ? 'bg-amber-500 border-amber-500 text-white shadow-xs'
+                                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'
+                                }`}
+                              >
+                                <Star className={`w-5 h-5 ${isChosen ? 'fill-white' : ''}`} />
+                                <span className="text-[10px] font-extrabold">{starNum}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {val && (
+                          <div className="text-center text-xs font-bold text-slate-700">
+                            Niveau {val}/5 : {
+                              val === 1 ? 'À consolider' :
+                              val === 2 ? 'En cours d\'acquisition' :
+                              val === 3 ? 'Acquis' :
+                              val === 4 ? 'Maîtrisé' : 'Expert'
+                            }
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* TYPE: SPEED_30S */}
+                    {field.type === 'speed_30s' && (
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={val !== undefined ? val : ''}
+                            onChange={e => handleNumberChange(currentTargetId, field.id, e.target.value)}
+                            placeholder="Distance en mètres..."
+                            className="w-full h-12 text-center text-xl font-bold font-mono rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600 pr-10"
+                          />
+                          <span className="absolute right-3.5 top-3.5 text-xs font-bold text-slate-400">m</span>
+                        </div>
+
+                        {/* Quick nudge buttons */}
+                        <div className="flex items-center justify-center gap-1.5">
+                          {[-10, -5, +5, +10].map(delta => (
+                            <button
+                              key={delta}
+                              type="button"
+                              onClick={() => handleQuickNudgeNumber(currentTargetId, field.id, delta)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold active:scale-95"
+                            >
+                              {delta > 0 ? `+${delta}m` : `${delta}m`}
+                            </button>
+                          ))}
+                        </div>
+
+                        {typeof val === 'number' && val > 0 && (
+                          <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-center text-emerald-800 font-extrabold text-sm flex items-center justify-center gap-1.5">
+                            <span>⚡</span>
+                            <span>Allure calculée : {(val * 0.12).toFixed(1)} km/h</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* TYPE: NUMBER, DISTANCE, CALCULATED */}
+                    {(field.type === 'number' || field.type === 'distance_speed' || field.type === 'calculated_target') && (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={val !== undefined ? val : ''}
+                          onChange={e => handleNumberChange(currentTargetId, field.id, e.target.value)}
+                          placeholder="Saisir valeur..."
+                          className="w-full h-12 text-center text-xl font-bold font-mono rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                        />
+
+                        {/* Quick nudge chips */}
+                        <div className="flex items-center justify-center gap-1.5">
+                          {[-5, -1, +1, +5].map(delta => (
+                            <button
+                              key={delta}
+                              type="button"
+                              onClick={() => handleQuickNudgeNumber(currentTargetId, field.id, delta)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold active:scale-95"
+                            >
+                              {delta > 0 ? `+${delta}` : `${delta}`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* TYPE: TIME_MM_SS */}
+                    {field.type === 'time_mm_ss' && (
+                      <TimeMmSs
+                        value={val}
+                        onChange={(newVal) => {
+                          setData(prev => ({
+                            ...prev,
+                            [currentTargetId]: { ...(prev[currentTargetId] || {}), [field.id]: newVal }
+                          }));
+                        }}
+                      />
+                    )}
+
+                    {/* TYPE: TIME_DURATION */}
+                    {field.type === 'time_duration' && (
+                      <TimeDurationInput
+                        value={val}
+                        units={field.options?.units || ['minutes', 'seconds']}
+                        targetDurationSeconds={field.options?.targetDuration}
+                        onChange={(newVal) => {
+                          setData(prev => ({
+                            ...prev,
+                            [currentTargetId]: { ...(prev[currentTargetId] || {}), [field.id]: newVal }
+                          }));
+                        }}
+                      />
+                    )}
+
+                    {/* SPECIALIZED TYPES */}
+                    {field.type === 'orienteering_star' && (
+                      <OrienteeringStar
+                        baliseCount={field.options?.baliseCount || 10}
+                        value={val || {}}
+                        onChange={(newVal) => {
+                          setData(prev => ({
+                            ...prev,
+                            [currentTargetId]: { ...(prev[currentTargetId] || {}), [field.id]: newVal }
+                          }));
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'training_log' && (
+                      <TrainingLog
+                        value={val}
+                        onChange={(newVal) => {
+                          setData(prev => ({
+                            ...prev,
+                            [currentTargetId]: { ...(prev[currentTargetId] || {}), [field.id]: newVal }
+                          }));
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'match_stats' && (
+                      <MatchStats
+                        value={val}
+                        onChange={(newVal) => {
+                          setData(prev => ({
+                            ...prev,
+                            [currentTargetId]: { ...(prev[currentTargetId] || {}), [field.id]: newVal }
+                          }));
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'artistic_rating' && (
+                      <ArtisticRating
+                        value={val}
+                        onChange={(newVal) => {
+                          setData(prev => ({
+                            ...prev,
+                            [currentTargetId]: { ...(prev[currentTargetId] || {}), [field.id]: newVal }
+                          }));
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'health_fitness_log' && (
+                      <HealthFitnessLog
+                        value={val}
+                        onChange={(newVal) => {
+                          setData(prev => ({
+                            ...prev,
+                            [currentTargetId]: { ...(prev[currentTargetId] || {}), [field.id]: newVal }
+                          }));
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'sequence_planner' && (
+                      <SequencePlanner
+                        value={val}
+                        onChange={(newVal) => {
+                          setData(prev => ({
+                            ...prev,
+                            [currentTargetId]: { ...(prev[currentTargetId] || {}), [field.id]: newVal }
+                          }));
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'ratio_action' && (
+                      <RatioAction
+                        value={val}
+                        onChange={(newVal) => {
+                          setData(prev => ({
+                            ...prev,
+                            [currentTargetId]: { ...(prev[currentTargetId] || {}), [field.id]: newVal }
+                          }));
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'performance_log' && (
+                      <PerformanceLog
+                        value={val}
+                        onChange={(newVal) => {
+                          setData(prev => ({
+                            ...prev,
+                            [currentTargetId]: { ...(prev[currentTargetId] || {}), [field.id]: newVal }
+                          }));
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'orienteering_log' && (
+                      <OrienteeringLog
+                        value={val}
+                        onChange={(newVal) => {
+                          setData(prev => ({
+                            ...prev,
+                            [currentTargetId]: { ...(prev[currentTargetId] || {}), [field.id]: newVal }
+                          }));
+                        }}
+                      />
+                    )}
+
+                    {field.type === 'project_target' && (
+                      <ProjectTarget
+                        value={val}
+                        onChange={(newVal) => {
+                          setData(prev => ({
+                            ...prev,
+                            [currentTargetId]: { ...(prev[currentTargetId] || {}), [field.id]: newVal }
+                          }));
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Bilan & Quick EPS Comment Chips */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wide">
+            <MessageSquareQuote className="w-4 h-4 text-indigo-600" />
+            <span>Remarque / Bilan élève</span>
+          </div>
+
+          {/* Quick Comment Chips */}
+          <div className="flex flex-wrap gap-1.5">
+            {QUICK_BILAN_TAGS.map(tag => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => handleAddBilanTag(currentTargetId, tag)}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 text-xs font-semibold transition-all active:scale-95 border border-slate-200"
+              >
+                + {tag}
+              </button>
+            ))}
+          </div>
+
+          <textarea
+            value={bilans[currentTargetId] || ''}
+            onChange={e => setBilans(prev => ({ ...prev, [currentTargetId]: e.target.value }))}
+            placeholder="Écrivez un conseil ou appuyez sur les suggestions ci-dessus..."
+            rows={3}
+            className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600 resize-none"
+          />
+        </div>
       </main>
+
+      {/* Sticky Bottom Action Bar (Thumb Zone) */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 shadow-lg">
+        <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
+          {/* Multi-student Next button or status summary */}
+          <div className="text-xs">
+            <span className="font-extrabold text-slate-900 block">
+              {answeredFieldsCount}/{totalFields} critères
+            </span>
+            <span className="text-[11px] text-slate-500 font-medium">
+              {selectedTargets.length > 1 ? `${activeTargetIndex + 1}/${selectedTargets.length} élèves` : 'Prêt à valider'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {selectedTargets.length > 1 && activeTargetIndex < selectedTargets.length - 1 && (
+              <Button
+                variant="outline"
+                onClick={() => setActiveTargetIndex(prev => prev + 1)}
+                className="h-12 px-3 text-xs font-bold text-slate-700 border-slate-300"
+              >
+                Suivant →
+              </Button>
+            )}
+
+            <Button
+              size="lg"
+              onClick={handleSubmit}
+              className="h-12 px-5 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md flex items-center gap-1.5"
+            >
+              <Check className="w-4 h-4 stroke-[3]" />
+              <span>Valider & Enregistrer</span>
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

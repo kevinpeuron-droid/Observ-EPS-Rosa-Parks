@@ -26,7 +26,9 @@ import {
   FileSpreadsheet,
   MonitorPlay,
   Eye,
-  Settings2
+  Settings2,
+  Smartphone,
+  ChevronRight
 } from 'lucide-react';
 import { ObservationField, StudentSessionStatus } from '../types';
 
@@ -56,6 +58,12 @@ export function TeacherSessionEntry() {
   const activeSheet = sheets.find(s => s.id === selectedSheetId) || sessionSheets[0];
 
   const sessionObs = observations.filter(o => o.sessionId === session?.id);
+
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) return 'cards';
+    return 'table';
+  });
+  const [mobileStudentIndex, setMobileStudentIndex] = useState(0);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
@@ -354,6 +362,33 @@ export function TeacherSessionEntry() {
             {isFullscreen ? 'Quitter Plein Écran' : 'Plein Écran'}
           </Button>
 
+          {/* View Mode Toggle: Cards (Mobile) vs Table (Desktop) */}
+          <div className="inline-flex rounded-xl p-0.5 bg-slate-100 border border-slate-200 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all ${
+                viewMode === 'cards' ? 'bg-white text-indigo-700 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Mode adapté smartphone : fiches élèves avec gros boutons tactiles"
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>Fiche Mobile</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all ${
+                viewMode === 'table' ? 'bg-white text-indigo-700 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Mode grille tableau : idéal sur grand écran ou PC"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Grille Tableau</span>
+              <span className="sm:hidden">Tableau</span>
+            </button>
+          </div>
+
           <Link to={`/project/${session.id}`}>
             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
               <MonitorPlay className="w-3.5 h-3.5 mr-1.5" />
@@ -457,7 +492,314 @@ export function TeacherSessionEntry() {
         </div>
       </div>
 
-      {/* SPREADSHEET / GRID TABLE */}
+      {/* SPREADSHEET OR MOBILE CARDS VIEW */}
+      {viewMode === 'cards' ? (
+        <div className="space-y-4">
+          {/* Mobile Student Stepper Bar */}
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2">
+            <button
+              type="button"
+              disabled={mobileStudentIndex === 0}
+              onClick={() => setMobileStudentIndex(prev => Math.max(0, prev - 1))}
+              className="h-11 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-slate-700 font-bold text-xs flex items-center gap-1 transition-all active:scale-95 shrink-0"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">Précédent</span>
+            </button>
+
+            {/* Direct Student Selector Dropdown */}
+            <div className="flex-1 max-w-sm text-center">
+              <select
+                value={mobileStudentIndex}
+                onChange={e => setMobileStudentIndex(Number(e.target.value))}
+                className="w-full h-11 px-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs font-bold text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-600 text-center"
+              >
+                {studentsList.map((st, idx) => (
+                  <option key={st.id} value={idx}>
+                    {idx + 1}. {st.name} ({getStudentStatus(st.id) === 'present' ? 'P' : getStudentStatus(st.id) === 'absent' ? 'A' : 'D'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              disabled={mobileStudentIndex >= studentsList.length - 1}
+              onClick={() => setMobileStudentIndex(prev => Math.min(studentsList.length - 1, prev + 1))}
+              className="h-11 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-slate-700 font-bold text-xs flex items-center gap-1 transition-all active:scale-95 shrink-0"
+            >
+              <span className="hidden sm:inline">Suivant</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Active Student Card */}
+          {studentsList.length > 0 && (() => {
+            const st = studentsList[mobileStudentIndex] || studentsList[0];
+            const status = getStudentStatus(st.id);
+            const noGear = getStudentNoGear(st.id);
+            const isPositive = session.positiveStudentIds?.includes(st.id);
+            const isNegative = session.negativeStudentIds?.includes(st.id);
+            const bilan = getStudentBilan(st.id);
+
+            return (
+              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                {/* Student Card Header */}
+                <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-extrabold text-sm shrink-0">
+                      {mobileStudentIndex + 1}
+                    </span>
+                    <div>
+                      <h2 className="text-lg font-extrabold text-slate-900 leading-tight">{st.name}</h2>
+                      <Link to={`/student/${st.id}/class/${cls?.id}`} className="text-[11px] text-indigo-600 hover:underline font-semibold">
+                        Fiche individuelle élève →
+                      </Link>
+                    </div>
+                  </div>
+
+                  {/* Group Dynamic Star / Warning */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePositive(st.id)}
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                        isPositive ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-700'
+                      }`}
+                      title="Élève moteur ⭐"
+                    >
+                      <Star className={`w-4 h-4 ${isPositive ? 'fill-white' : ''}`} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleNegative(st.id)}
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                        isNegative ? 'bg-rose-600 text-white shadow-xs' : 'bg-slate-100 text-slate-400 hover:bg-rose-50 hover:text-rose-700'
+                      }`}
+                      title="Point de vigilance ⚠️"
+                    >
+                      <AlertTriangle className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Attendance Buttons: P / A / D / Sans tenue */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleStatusChange(st.id, 'present')}
+                    className={`py-2 px-1 rounded-xl text-xs font-bold border transition-all active:scale-95 ${
+                      status === 'present' ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-slate-50 text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    Présent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleStatusChange(st.id, 'absent')}
+                    className={`py-2 px-1 rounded-xl text-xs font-bold border transition-all active:scale-95 ${
+                      status === 'absent' ? 'bg-red-600 text-white border-red-600 shadow-xs' : 'bg-slate-50 text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    Absent (A)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleStatusChange(st.id, 'dispense')}
+                    className={`py-2 px-1 rounded-xl text-xs font-bold border transition-all active:scale-95 ${
+                      status === 'dispense' ? 'bg-amber-600 text-white border-amber-600 shadow-xs' : 'bg-slate-50 text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    Dispensé (D)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleNoGear(st.id)}
+                    className={`py-2 px-1 rounded-xl text-[11px] font-bold border transition-all active:scale-95 ${
+                      noGear ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-slate-50 text-slate-500 border-slate-200'
+                    }`}
+                  >
+                    👟 Sans tenue
+                  </button>
+                </div>
+
+                {/* Criteria of active sheet */}
+                <div className="space-y-3 pt-2">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+                    Critères de la fiche ({activeSheet?.fields.length || 0})
+                  </h3>
+
+                  {(activeSheet?.fields || []).map(field => {
+                    const val = getStudentFieldValue(st.id, field.id);
+                    const isA = val === 'A' || val === 'a';
+                    const isD = val === 'D' || val === 'd';
+
+                    return (
+                      <div key={field.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-bold text-slate-900">{field.label}</span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleQuickMarkCell(st.id, field.id, 'A')}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-colors ${
+                                isA ? 'bg-red-600 text-white border-red-600' : 'bg-white text-slate-500 border-slate-200'
+                              }`}
+                            >
+                              A
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleQuickMarkCell(st.id, field.id, 'D')}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-colors ${
+                                isD ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-500 border-slate-200'
+                              }`}
+                            >
+                              D
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Input tailored to field type */}
+                        {isA ? (
+                          <div className="flex items-center justify-between p-2.5 bg-red-100 rounded-xl text-red-800 font-bold text-xs">
+                            <span>ABSENT (A) SUR CE CRITÈRE</span>
+                            <button type="button" onClick={() => handleClearCell(st.id, field.id)} className="underline text-red-600 text-[11px]">Effacer</button>
+                          </div>
+                        ) : isD ? (
+                          <div className="flex items-center justify-between p-2.5 bg-amber-100 rounded-xl text-amber-800 font-bold text-xs">
+                            <span>DISPENSÉ (D) SUR CE CRITÈRE</span>
+                            <button type="button" onClick={() => handleClearCell(st.id, field.id)} className="underline text-amber-600 text-[11px]">Effacer</button>
+                          </div>
+                        ) : field.type === 'counter' ? (
+                          <div className="flex items-center justify-between gap-3 bg-white p-2 rounded-xl border border-slate-200">
+                            <button
+                              type="button"
+                              onClick={() => handleCounterStep(st.id, field.id, -1)}
+                              className="w-12 h-12 rounded-xl bg-slate-100 text-slate-700 font-extrabold text-xl flex items-center justify-center active:scale-95 shrink-0"
+                            >
+                              <Minus className="w-5 h-5 stroke-[3]" />
+                            </button>
+                            <span className="text-2xl font-extrabold font-mono text-slate-900">
+                              {typeof val === 'number' ? val : 0}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCounterStep(st.id, field.id, 1)}
+                              className="w-12 h-12 rounded-xl bg-indigo-600 text-white font-extrabold text-xl flex items-center justify-center active:scale-95 shrink-0 shadow-xs"
+                            >
+                              <Plus className="w-5 h-5 stroke-[3]" />
+                            </button>
+                          </div>
+                        ) : field.type === 'boolean' ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleCellChange(st.id, field.id, false)}
+                              className={`py-3 rounded-xl text-xs font-bold border transition-all ${
+                                val === false ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-slate-600 border-slate-200'
+                              }`}
+                            >
+                              Non validé
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCellChange(st.id, field.id, true)}
+                              className={`py-3 rounded-xl text-xs font-bold border transition-all ${
+                                val === true ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200'
+                              }`}
+                            >
+                              Validé (OUI)
+                            </button>
+                          </div>
+                        ) : field.type === 'rating' ? (
+                          <div className="grid grid-cols-5 gap-1.5">
+                            {[1, 2, 3, 4, 5].map(starNum => (
+                              <button
+                                key={starNum}
+                                type="button"
+                                onClick={() => handleRatingClick(st.id, field.id, starNum)}
+                                className={`h-12 rounded-xl border font-bold text-xs flex flex-col items-center justify-center gap-0.5 transition-all ${
+                                  Number(val) >= starNum ? 'bg-amber-500 text-white border-amber-500 shadow-xs' : 'bg-white text-slate-400 border-slate-200'
+                                }`}
+                              >
+                                <span>★</span>
+                                <span className="text-[10px]">{starNum}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={val !== undefined ? val : ''}
+                              onChange={e => handleCellChange(st.id, field.id, e.target.value)}
+                              placeholder="Saisir valeur..."
+                              className="w-full h-11 text-center font-bold text-lg rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                            />
+                            {field.type === 'speed_30s' && typeof val === 'number' && val > 0 && (
+                              <div className="text-center text-xs font-bold text-emerald-600">
+                                = {(val * 0.12).toFixed(1)} km/h
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Bilan with suggestions */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400 block">
+                    Remarque / Bilan
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['Très bon engagement', 'Consignes respectées', 'Progrès technique', 'Effort régulier', 'Vigilance sécurité'].map(tag => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => {
+                          const current = bilan ? `${bilan}. ${tag}` : tag;
+                          handleBilanChange(st.id, current);
+                        }}
+                        className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 text-[11px] font-semibold border border-slate-200"
+                      >
+                        + {tag}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={bilan}
+                    onChange={e => handleBilanChange(st.id, e.target.value)}
+                    placeholder="Conseil ou appréciation..."
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                  />
+                </div>
+
+                {/* Next student action */}
+                <div className="pt-2">
+                  <Button
+                    size="lg"
+                    onClick={() => {
+                      if (mobileStudentIndex < studentsList.length - 1) {
+                        setMobileStudentIndex(prev => prev + 1);
+                      }
+                    }}
+                    className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl flex items-center justify-center gap-2"
+                  >
+                    <span>{mobileStudentIndex < studentsList.length - 1 ? 'Enregistrer et passer au suivant' : 'Dernier élève atteint'}</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      ) : (
+      /* SPREADSHEET / GRID TABLE */
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
         {/* Table scroll container */}
         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-250px)]">
@@ -899,6 +1241,7 @@ export function TeacherSessionEntry() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
