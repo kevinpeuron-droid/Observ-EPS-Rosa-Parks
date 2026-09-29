@@ -21,10 +21,12 @@ import {
   AlertTriangle,
   Tag,
   Star,
-  FileSpreadsheet
+  FileSpreadsheet,
+  BarChart3
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { StudentSessionStatus } from '../types';
+import { ClassSessionOverview } from '../components/ClassSessionOverview';
 
 const POSITIVE_PRESETS = [
   '🌟 Moteur / Dynamique',
@@ -192,8 +194,19 @@ export function SessionDetail() {
   const dispenseCount = studentsList.filter(s => getStudentStatus(s.id) === 'dispense').length;
   const noGearCount = studentsList.filter(s => getStudentNoGear(s.id)).length;
 
+  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'dynamics' | 'sharing'>('overview');
+
+  const activeSheet = sheets.find(s => s.id === session.sheetId) || sessionSheets[0];
+  const totalCriteria = activeSheet?.fields?.length || 0;
+  const completedCount = studentsList.filter(s => {
+    const stObs = sessionObs.filter(o => o.targetId === s.id);
+    const latest = stObs.length > 0 ? [...stObs].sort((a, b) => b.timestamp - a.timestamp)[0] : null;
+    if (!latest || latest.status === 'absent' || latest.status === 'dispense') return false;
+    return totalCriteria > 0 && activeSheet.fields.every(f => latest.data[f.id] !== undefined && latest.data[f.id] !== '');
+  }).length;
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 ease-out max-w-6xl mx-auto">
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 ease-out max-w-6xl mx-auto">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -245,7 +258,85 @@ export function SessionDetail() {
         </div>
       </div>
 
-      {/* Appel et Matériel (Tenue) Section */}
+      {/* Navigation Tabs : Vue d'ensemble vs Appel vs Dynamique vs Partage */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-3 overflow-x-auto no-scrollbar">
+        <button
+          type="button"
+          onClick={() => setActiveTab('overview')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
+            activeTab === 'overview'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          <span>Vue d'ensemble de la classe</span>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold ${
+            activeTab === 'overview' ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-700'
+          }`}>
+            {completedCount}/{studentsList.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('attendance')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
+            activeTab === 'attendance'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Appel & Matériel</span>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold ${
+            activeTab === 'attendance' ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-700'
+          }`}>
+            {presentCount} prés.
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('dynamics')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
+            activeTab === 'dynamics'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>Dynamique & Bilan</span>
+          {positiveStudentIds.length > 0 && (
+            <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold ${
+              activeTab === 'dynamics' ? 'bg-indigo-700 text-white' : 'bg-emerald-100 text-emerald-800'
+            }`}>
+              {positiveStudentIds.length}⭐
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('sharing')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
+            activeTab === 'sharing'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <QrCode className="w-4 h-4" />
+          <span>Partage Terrain (QR Code)</span>
+        </button>
+      </div>
+
+      {/* TAB 1: VUE D'ENSEMBLE DE LA CLASSE */}
+      {activeTab === 'overview' && (
+        <ClassSessionOverview sessionId={session.id} />
+      )}
+
+      {/* TAB 2: APPEL ET MATERIEL */}
+      {activeTab === 'attendance' && (
       <Card className="border-indigo-100 shadow-sm overflow-hidden">
         <CardHeader className="bg-gradient-to-r from-slate-50 to-indigo-50/40 border-b border-slate-200/80">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -416,8 +507,10 @@ export function SessionDetail() {
           )}
         </CardContent>
       </Card>
+      )}
 
-      {/* BILAN & DYNAMIQUE DE GROUPE */}
+      {/* TAB 3: BILAN & DYNAMIQUE DE GROUPE */}
+      {activeTab === 'dynamics' && (
       <Card className="border-slate-200 shadow-sm overflow-hidden">
         <CardHeader className="bg-slate-50/80 border-b border-slate-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -661,8 +754,10 @@ export function SessionDetail() {
           </Button>
         </CardFooter>
       </Card>
+      )}
 
-      {/* Partage terrain QR Code */}
+      {/* TAB 4: PARTAGE TERRAIN QR CODE */}
+      {activeTab === 'sharing' && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <Card className="border-blue-100 shadow-sm">
           <CardHeader>
@@ -766,6 +861,7 @@ export function SessionDetail() {
           </CardFooter>
         </Card>
       </div>
+      )}
     </div>
   );
 }
