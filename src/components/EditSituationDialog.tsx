@@ -24,6 +24,8 @@ export function EditSituationDialog({ sheet, isOpen, onClose }: EditSituationDia
   const [newBaliseCount, setNewBaliseCount] = useState<number>(10);
   const [newTargetMinutes, setNewTargetMinutes] = useState<number>(5);
   const [newTargetSeconds, setNewTargetSeconds] = useState<number>(0);
+  const [newBlockCount, setNewBlockCount] = useState<number>(4);
+  const [newBlockDurationMinutes, setNewBlockDurationMinutes] = useState<number>(5);
   const [newFieldUnits, setNewFieldUnits] = useState<{ hours: boolean; minutes: boolean; seconds: boolean }>({
     hours: false,
     minutes: true,
@@ -61,6 +63,10 @@ export function EditSituationDialog({ sheet, isOpen, onClose }: EditSituationDia
       if (newTargetMinutes > 0 || newTargetSeconds > 0) {
         options.targetDuration = (newTargetMinutes * 60) + newTargetSeconds;
       }
+    }
+    if (newType === 'running_exact_time' || newType === 'demi_fond_temps_juste') {
+      options.blockCount = newBlockCount || 4;
+      options.blockDurationSeconds = (newBlockDurationMinutes || 5) * 60;
     }
 
     addFieldToSheet(sheet.id, {
@@ -205,6 +211,39 @@ export function EditSituationDialog({ sheet, isOpen, onClose }: EditSituationDia
                       className="w-16 h-8 text-xs bg-slate-50"
                     />
                     <span>sec</span>
+                  </div>
+                </div>
+              )}
+
+              {(newType === 'running_exact_time' || newType === 'demi_fond_temps_juste') && (
+                <div className="p-3 bg-white rounded-lg border border-purple-200 space-y-2 text-xs">
+                  <div className="font-semibold text-purple-900">Paramètres du Demi-Fond (Course au Temps Juste) :</div>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-600">Nombre de blocs :</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={newBlockCount || ''}
+                        onChange={e => setNewBlockCount(parseInt(e.target.value) || 4)}
+                        className="w-16 h-8 text-xs bg-slate-50 text-center"
+                      />
+                      <span>blocs</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-600">Durée par bloc :</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={newBlockDurationMinutes || ''}
+                        onChange={e => setNewBlockDurationMinutes(parseInt(e.target.value) || 5)}
+                        className="w-16 h-8 text-xs bg-slate-50 text-center"
+                      />
+                      <span>minutes (ex: 5'00)</span>
+                    </div>
                   </div>
                 </div>
               )}

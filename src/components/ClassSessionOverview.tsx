@@ -209,6 +209,28 @@ export function ClassSessionOverview({ sessionId, onClose, isModal = false }: Cl
             count: nums.length
           };
         }
+      } else if (f.type === 'running_exact_time' || f.type === 'demi_fond_temps_juste') {
+        let totalD = 0;
+        let totalTCE = 0;
+        let evaluatedCount = 0;
+        validValues.forEach(val => {
+          if (val?.blocks) {
+            const completed = val.blocks.filter((b: any) => b.actualDistance !== undefined && b.effectiveRunningTimeSeconds !== undefined);
+            if (completed.length > 0) {
+              evaluatedCount++;
+              completed.forEach((b: any) => {
+                totalD += (b.actualDistance || 0);
+                totalTCE += (b.effectiveRunningTimeSeconds || 0);
+              });
+            }
+          }
+        });
+        const avgSpeed = totalTCE > 0 ? (totalD / totalTCE) * 3.6 : 0;
+        stats[f.id] = {
+          avg: Math.round(avgSpeed * 10) / 10,
+          total: totalD,
+          count: evaluatedCount
+        };
       } else if (f.type === 'boolean') {
         const booleans = validValues.map(v => v === true || v === 'true');
         if (booleans.length > 0) {
@@ -320,6 +342,23 @@ export function ClassSessionOverview({ sessionId, onClose, isModal = false }: Cl
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-500 border border-slate-200">
           <X className="w-3.5 h-3.5" /> Non
         </span>
+      );
+    }
+
+    if (field.type === 'running_exact_time' || field.type === 'demi_fond_temps_juste') {
+      const blocks = val?.blocks || [];
+      const completed = blocks.filter((b: any) => b.actualDistance !== undefined && b.effectiveRunningTimeSeconds !== undefined);
+      if (completed.length === 0) return <span className="text-slate-300 font-mono">-</span>;
+      const totalDist = completed.reduce((sum: number, b: any) => sum + (b.actualDistance || 0), 0);
+      const totalTCE = completed.reduce((sum: number, b: any) => sum + (b.effectiveRunningTimeSeconds || 0), 0);
+      const avgSpeed = totalTCE > 0 ? ((totalDist / totalTCE) * 3.6).toFixed(1) : '0';
+      return (
+        <div className="flex flex-col text-xs leading-tight">
+          <span className="font-extrabold text-indigo-700">{totalDist}m ({avgSpeed} km/h)</span>
+          <span className="text-[10px] text-slate-500 font-mono">
+            {completed.length} bl. • Couru {Math.floor(totalTCE / 60)}'
+          </span>
+        </div>
       );
     }
 
@@ -867,7 +906,10 @@ export function ClassSessionOverview({ sessionId, onClose, isModal = false }: Cl
                           {stat?.avg !== undefined && (field.type === 'number' || field.type === 'distance_speed') && (
                             <span>{stat.avg}</span>
                           )}
-                          {!['rating', 'speed_30s', 'boolean', 'counter', 'number', 'distance_speed'].includes(field.type) && (
+                          {(field.type === 'running_exact_time' || field.type === 'demi_fond_temps_juste') && (
+                            <span>{stat?.avg ? `${stat.avg} km/h` : '-'}</span>
+                          )}
+                          {!['rating', 'speed_30s', 'boolean', 'counter', 'number', 'distance_speed', 'running_exact_time', 'demi_fond_temps_juste'].includes(field.type) && (
                             <span className="text-slate-400 font-normal">-</span>
                           )}
                         </td>

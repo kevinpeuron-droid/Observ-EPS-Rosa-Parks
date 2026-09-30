@@ -22,7 +22,9 @@ export const FIELD_TYPE_LABELS: Record<ObservationFieldType, string> = {
   artistic_rating: 'Grille d\'évaluation CA3 (Danse / Gym)',
   match_stats: 'Statistiques de Match CA4 (Sports Co / Raquettes)',
   health_fitness_log: 'Carnet Santé & Entretien CA5 (BPM, Ateliers, Fatigue)',
-  calculated_target: 'Calcul depuis une séance passée (Cible, %)'
+  calculated_target: 'Calcul depuis une séance passée (Cible, %)',
+  running_exact_time: 'Demi-Fond - Course au Temps Juste (4x5\')',
+  demi_fond_temps_juste: 'Demi-Fond - Course au Temps Juste (4x5\')'
 };
 
 const CA_NAMES = {

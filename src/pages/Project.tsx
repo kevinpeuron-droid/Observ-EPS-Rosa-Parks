@@ -119,6 +119,12 @@ export function Project() {
            const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
            aggregates[f.id] = latest.data[f.id];
         }
+      } else if (f.type === 'running_exact_time' || f.type === 'demi_fond_temps_juste') {
+        const validObs = obs.filter(o => o.data[f.id]);
+        if (validObs.length > 0) {
+           const latest = validObs.sort((a, b) => b.timestamp - a.timestamp)[0];
+           aggregates[f.id] = latest.data[f.id];
+        }
       } else if (f.type === 'ratio_action') {
         const validObs = obs.filter(o => o.data[f.id]);
         if (validObs.length > 0) {
@@ -364,6 +370,30 @@ export function Project() {
                                 </span>
                               )}
                             </div>
+                          </div>
+                        </div>
+                      );
+                    } else if ((field.type === 'running_exact_time' || field.type === 'demi_fond_temps_juste') && aggregates[field.id]) {
+                      const data = aggregates[field.id];
+                      const blocks = data?.blocks || [];
+                      const completed = blocks.filter((b: any) => b.actualDistance !== undefined && b.effectiveRunningTimeSeconds !== undefined);
+                      const totalD = completed.reduce((sum: number, b: any) => sum + (b.actualDistance || 0), 0);
+                      const totalTCE = completed.reduce((sum: number, b: any) => sum + (b.effectiveRunningTimeSeconds || 0), 0);
+                      const totalTM = completed.reduce((sum: number, b: any) => sum + Math.max(0, 300 - (b.effectiveRunningTimeSeconds || 0)), 0);
+                      const realSpeed = totalTCE > 0 ? ((totalD / totalTCE) * 3.6).toFixed(1) : '0';
+
+                      return (
+                        <div key={field.id} className="flex flex-col bg-slate-950/50 p-4 rounded-xl gap-2 border border-slate-800">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400 font-medium">{field.label}</span>
+                            <span className="text-2xl font-bold font-mono text-emerald-400">
+                              {totalD} m <span className="text-sm font-semibold text-slate-400">({realSpeed} km/h)</span>
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-2">
+                            <span>{completed.length} blocs validés</span>
+                            <span className="font-mono text-emerald-400">Couru: {Math.floor(totalTCE / 60)}'{String(totalTCE % 60).padStart(2, '0')}</span>
+                            {totalTM > 0 && <span className="font-mono text-rose-400 font-bold">Marché: {totalTM}s</span>}
                           </div>
                         </div>
                       );

@@ -37,6 +37,7 @@ import { TimeMmSs } from '../components/TimeMmSs';
 import { TimeDurationInput } from '../components/TimeDurationInput';
 import { StudentSessionStatus, ObservationField } from '../types';
 import { ClassSessionOverview } from '../components/ClassSessionOverview';
+import { RunningExactTime } from '../components/RunningExactTime';
 
 export function Observe() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -194,6 +195,10 @@ export function Observe() {
           parts.push(`${val}★`);
         } else if (f.type === 'speed_30s' && typeof val === 'number') {
           parts.push(`${(val * 0.12).toFixed(1)} km/h`);
+        } else if ((f.type === 'running_exact_time' || f.type === 'demi_fond_temps_juste') && val?.blocks) {
+          const completed = (val.blocks || []).filter((b: any) => b.actualDistance !== undefined && b.effectiveRunningTimeSeconds !== undefined);
+          const totalDist = completed.reduce((sum: number, b: any) => sum + (b.actualDistance || 0), 0);
+          parts.push(`${completed.length} blocs (${totalDist}m)`);
         } else if (f.type === 'counter') {
           parts.push(`${f.label.slice(0, 8)}: ${val}`);
         } else if (f.type === 'boolean') {
@@ -1740,6 +1745,21 @@ export function Observe() {
                     {field.type === 'project_target' && (
                       <ProjectTarget
                         value={val}
+                        onChange={(newVal) => {
+                          const updated = { ...(data[currentTargetId] || obsByTarget.get(currentTargetId)?.data || {}), [field.id]: newVal };
+                          setData(prev => ({
+                            ...prev,
+                            [currentTargetId]: updated
+                          }));
+                          persistTargetObservation(currentTargetId, updated);
+                        }}
+                      />
+                    )}
+
+                    {(field.type === 'running_exact_time' || field.type === 'demi_fond_temps_juste') && (
+                      <RunningExactTime
+                        value={val}
+                        options={field.options}
                         onChange={(newVal) => {
                           const updated = { ...(data[currentTargetId] || obsByTarget.get(currentTargetId)?.data || {}), [field.id]: newVal };
                           setData(prev => ({
