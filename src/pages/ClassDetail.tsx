@@ -4,7 +4,7 @@ import { useStore } from '../store';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Activity as ActivityIcon, Plus, ChevronRight, UserPlus, Trash2, Eye, Edit2, Save, X, RefreshCw, Sparkles, BookOpen } from 'lucide-react';
+import { Activity as ActivityIcon, Plus, ChevronRight, UserPlus, Trash2, Eye, Edit2, Save, X, RefreshCw, Sparkles, BookOpen, Award } from 'lucide-react';
 import { EditActivityModal } from '../components/EditActivityModal';
 import { SyncActivityModal } from '../components/SyncActivityModal';
 import { DeleteActivityModal } from '../components/DeleteActivityModal';
@@ -188,6 +188,16 @@ export function ClassDetail() {
           <p className="text-slate-500 mt-1">Gérez les élèves et les activités (cycles) de cette classe.</p>
         </div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          {classActivities.length > 0 && (
+            <Button 
+              onClick={() => navigate(`/evaluation/${classActivities[0].id}`)} 
+              className="bg-amber-600 hover:bg-amber-700 text-white w-full sm:w-auto shadow-sm"
+              title="Accéder au Mode Évaluation sommative de cette classe"
+            >
+              <Award className="w-4 h-4 mr-2" />
+              Évaluations
+            </Button>
+          )}
           <Link to={`/class/${classId}/synthesis`}>
             <Button className="bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto shadow-sm">
               <Eye className="w-4 h-4 mr-2" />
@@ -325,6 +335,13 @@ export function ClassDetail() {
                     </Link>
 
                     <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => navigate(`/evaluation/${act.id}`)}
+                        className="p-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
+                        title="Ouvrir le Mode Évaluation sommative pour ce cycle"
+                      >
+                        <Award className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => setSyncingActivity(act)}
                         className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"

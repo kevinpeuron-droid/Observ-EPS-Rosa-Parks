@@ -21,6 +21,7 @@ export type EvaluationCriterion = {
   label: string;
   maxScore: number;
   weight: number;
+  description?: string;
 };
 
 export type TemplateActivity = {
@@ -65,6 +66,7 @@ export type Session = {
   positiveStudentIds?: string[]; // Élèves très positifs pour le groupe
   negativeStudentIds?: string[]; // Élèves très négatifs pour le groupe
   studentImpactNotes?: Record<string, string>; // studentId -> note / tag explicatif
+  isEvaluationSession?: boolean; // Séance d'évaluation sommative
 };
 
 export type Activity = {
@@ -75,6 +77,9 @@ export type Activity = {
   templateId?: string;
   evaluationCriteria?: EvaluationCriterion[];
   grades?: Record<string, Record<string, number | string>>; // studentId -> criterionId -> score (or 'A', 'D')
+  studentAppreciations?: Record<string, string>; // studentId -> appréciation individualisée
+  isEvaluationCompleted?: boolean;
+  evaluationDate?: string;
 };
 
 export type StudentSessionStatus = 'present' | 'absent' | 'dispense';

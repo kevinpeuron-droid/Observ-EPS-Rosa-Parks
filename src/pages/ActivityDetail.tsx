@@ -17,7 +17,8 @@ import {
   BookOpen, 
   Sparkles,
   Settings,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Award
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -174,6 +175,16 @@ export function ActivityDetail() {
             Modifier
           </Button>
 
+          <Button 
+            size="sm"
+            onClick={() => navigate(`/evaluation/${activity.id}`)}
+            className="bg-amber-600 hover:bg-amber-700 text-white font-bold shadow-xs"
+            title="Accéder au Mode Évaluation sommative (Grille de notation & export Pronote)"
+          >
+            <Award className="w-4 h-4 mr-1.5" />
+            Mode Évaluation
+          </Button>
+
           <EvaluationConfigDialog activityId={activity.id} />
 
           <Button 
@@ -188,6 +199,37 @@ export function ActivityDetail() {
           </Button>
         </div>
       </div>
+
+      {/* BANNIÈRE MODE ÉVALUATION */}
+      <Card className="border-amber-200 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent overflow-hidden shadow-xs">
+        <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Award className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-base text-slate-900">Évaluation sommative de ce cycle</h3>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 border border-amber-200 uppercase">
+                  {activity.evaluationCriteria?.length || 4} critères
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Saisissez les notes, consultez les calculs automatiques /20 et exportez le bordereau officiel (CSV / PDF).
+              </p>
+            </div>
+          </div>
+
+          <Button
+            onClick={() => navigate(`/evaluation/${activity.id}`)}
+            className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold w-full sm:w-auto shadow-xs shrink-0"
+          >
+            <Award className="w-4 h-4 mr-1.5" />
+            Ouvrir le Mode Évaluation
+            <ChevronRight className="w-4 h-4 ml-1" />
+          </Button>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Séances */}

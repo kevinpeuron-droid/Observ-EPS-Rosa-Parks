@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Activity, LayoutDashboard, ChevronLeft, Download, Library as LibraryIcon } from 'lucide-react';
+import { Activity, LayoutDashboard, ChevronLeft, Download, Library as LibraryIcon, Award } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { SettingsDialog } from './SettingsDialog';
 
@@ -8,6 +8,7 @@ export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const isHome = location.pathname === '/';
+  const isEvaluation = location.pathname.startsWith('/evaluation') || location.pathname.startsWith('/evaluations');
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
@@ -34,17 +35,27 @@ export function Layout() {
               to="/" 
               className={cn(
                 "flex items-center gap-2 text-sm font-medium transition-colors",
-                isHome ? "text-blue-600" : "text-slate-500 hover:text-slate-900"
+                isHome ? "text-blue-600 font-bold" : "text-slate-500 hover:text-slate-900"
               )}
             >
               <LayoutDashboard className="w-4 h-4" />
               Tableau de bord
             </Link>
             <Link 
+              to="/evaluation" 
+              className={cn(
+                "flex items-center gap-2 text-sm font-medium transition-colors",
+                isEvaluation ? "text-amber-600 font-bold" : "text-slate-500 hover:text-slate-900"
+              )}
+            >
+              <Award className="w-4 h-4 text-amber-500" />
+              Évaluations
+            </Link>
+            <Link 
               to="/library" 
               className={cn(
                 "flex items-center gap-2 text-sm font-medium transition-colors",
-                location.pathname.startsWith('/library') ? "text-indigo-600" : "text-slate-500 hover:text-slate-900"
+                location.pathname.startsWith('/library') ? "text-indigo-600 font-bold" : "text-slate-500 hover:text-slate-900"
               )}
             >
               <LibraryIcon className="w-4 h-4" />
@@ -54,7 +65,7 @@ export function Layout() {
               to="/import" 
               className={cn(
                 "flex items-center gap-2 text-sm font-medium transition-colors",
-                location.pathname === '/import' ? "text-emerald-600" : "text-slate-500 hover:text-slate-900"
+                location.pathname === '/import' ? "text-emerald-600 font-bold" : "text-slate-500 hover:text-slate-900"
               )}
             >
               <Download className="w-4 h-4" />

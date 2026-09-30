@@ -35,13 +35,37 @@ export function generateEpsReferenceDatabase(): EpsDatabaseExport {
     // CA 1
     {
       id: demiFondId,
-      name: 'Demi-Fond (1/2 Fond)',
+      name: 'Demi-Fond - Course au Temps Juste (4 x 5\')',
       ca: 1,
       evaluationCriteria: [
-        { id: genId(), label: 'Maîtrise de l\'allure visée (Régularité)', maxScore: 6, weight: 1 },
-        { id: genId(), label: 'Niveau de performance chronométrique', maxScore: 8, weight: 1 },
-        { id: genId(), label: 'Gestion de l\'effort & Fréquence cardiaque', maxScore: 4, weight: 1 },
-        { id: genId(), label: 'Rôle d\'observateur et de co-pilote', maxScore: 2, weight: 1 }
+        { 
+          id: genId(), 
+          label: 'Régularité & Allure (Temps de Marche TM < 30s)', 
+          maxScore: 6, 
+          weight: 1, 
+          description: 'Continuité de course sans marcher sur les 4 blocs de 5 min (TM total < 30s = 6 pts, profil Adaptatif = 4.5 pts, Sur-estimé = 2.5 pts)' 
+        },
+        { 
+          id: genId(), 
+          label: 'Performance & Vitesse réelle de course (km/h)', 
+          maxScore: 8, 
+          weight: 1, 
+          description: 'Distance totale cumulée et vitesse réelle effective de course sur le Temps de Course Effectif (TCE)' 
+        },
+        { 
+          id: genId(), 
+          label: 'Lucidité & Régulation du contrat visé', 
+          maxScore: 4, 
+          weight: 1, 
+          description: 'Alerte sur-régime détectée (TM > 30s) : Choix d\'adaptation du contrat (Maintien ou Réduction) pour terminer l\'effort' 
+        },
+        { 
+          id: genId(), 
+          label: 'Rôle d\'élève-observateur & co-pilote', 
+          maxScore: 2, 
+          weight: 1, 
+          description: 'Chronométrage rigoureux (TCE), calcul des temps de marche et conseil lucide apporté au coureur' 
+        }
       ]
     },
     {
@@ -180,7 +204,24 @@ export function generateEpsReferenceDatabase(): EpsDatabaseExport {
   ];
 
   const templateSheets: TemplateSheet[] = [
-    // 1/2 Fond
+    // 1/2 Fond - Situation d'évaluation certificative officielle
+    {
+      id: genId(),
+      templateActivityId: demiFondId,
+      name: 'Demi-Fond - Course au Temps Juste (4 x 5\')',
+      fields: [
+        {
+          id: genId(),
+          label: 'Course au Temps Juste (4 x 5\')',
+          type: 'running_exact_time',
+          options: {
+            blockCount: 4,
+            blockDurationSeconds: 300,
+            presetsDistances: [700, 750, 800, 850, 900, 950, 1000, 1050, 1100, 1150, 1200]
+          }
+        }
+      ]
+    },
     {
       id: genId(),
       templateActivityId: demiFondId,

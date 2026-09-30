@@ -1,10 +1,12 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useStore } from '../store';
-import { ChevronLeft, User, Activity as ActivityIcon, Calendar } from 'lucide-react';
+import { ChevronLeft, User, Activity as ActivityIcon, Calendar, Award } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { formatTimeDuration } from '../components/TimeDurationInput';
+import { Button } from '../components/ui/Button';
+import { calculateStudentEvaluation, getDefaultCriteriaForCa } from '../lib/evaluationHelpers';
 
 export function StudentDetail() {
   const { studentId, classId } = useParams<{ studentId: string; classId: string }>();
@@ -88,10 +90,79 @@ export function StudentDetail() {
 
           return (
             <div key={activity.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="bg-slate-50 p-4 border-b border-slate-200 flex items-center gap-2">
-                <ActivityIcon className="w-5 h-5 text-blue-600" />
-                <h2 className="text-xl font-bold text-slate-800">{activity.name}</h2>
+              <div className="bg-slate-50 p-4 border-b border-slate-200 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ActivityIcon className="w-5 h-5 text-blue-600" />
+                  <h2 className="text-xl font-bold text-slate-800">{activity.name}</h2>
+                </div>
+                <Link to={`/evaluation/${activity.id}`}>
+                  <Button size="sm" variant="outline" className="text-xs text-amber-700 bg-amber-50/50 border-amber-200 hover:bg-amber-100">
+                    <Award className="w-3.5 h-3.5 mr-1" />
+                    Mode Évaluation
+                  </Button>
+                </Link>
               </div>
+
+              {/* ÉVALUATION CERTIFICATIVE DE FIN DE CYCLE */}
+              {(() => {
+                const criteria = activity.evaluationCriteria && activity.evaluationCriteria.length > 0 
+                  ? activity.evaluationCriteria 
+                  : getDefaultCriteriaForCa(activity.ca);
+                const studentG = activity.grades?.[student.id];
+                const appreciation = activity.studentAppreciations?.[student.id];
+                const evalSummary = calculateStudentEvaluation(student.id, student.name, criteria, studentG, appreciation);
+
+                if (evalSummary.scoreOn20 === null && !evalSummary.appreciation && evalSummary.status === 'not_evaluated') {
+                  return null;
+                }
+
+                return (
+                  <div className="bg-amber-50/60 p-4 border-b border-amber-200">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs">
+                          <Award className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-slate-900">Évaluation sommative de fin de cycle</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${evalSummary.competenceLevel.bgClass} ${evalSummary.competenceLevel.colorClass} ${evalSummary.competenceLevel.borderClass}`}>
+                              {evalSummary.competenceLevel.label}
+                            </span>
+                          </div>
+                          {evalSummary.appreciation && (
+                            <p className="text-xs text-slate-600 italic mt-0.5">« {evalSummary.appreciation} »</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Note finale</span>
+                          <span className="text-2xl font-black font-mono text-indigo-700">
+                            {evalSummary.scoreOn20 !== null ? `${evalSummary.scoreOn20.toFixed(1)} / 20` : (evalSummary.status === 'absent' ? 'ABS' : 'DISP')}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Criteria chips */}
+                    <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-amber-200/60">
+                      {criteria.map(c => {
+                        const val = evalSummary.scores[c.id];
+                        return (
+                          <div key={c.id} className="text-xs bg-white px-2.5 py-1 rounded-lg border border-amber-200 flex items-center gap-1.5 shadow-2xs">
+                            <span className="text-slate-600 font-medium truncate max-w-[140px]">{c.label}:</span>
+                            <span className="font-bold font-mono text-indigo-800">
+                              {val !== undefined && val !== '' ? `${val}/${c.maxScore}` : '-'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
               
               <div className="p-4 sm:p-6 divide-y divide-slate-100">
                 {actSessions.map(session => {

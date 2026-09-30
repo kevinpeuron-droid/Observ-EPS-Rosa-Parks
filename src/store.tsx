@@ -398,8 +398,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     
     if (fieldsToUse.length === 0) {
-      // Default standard fields according to CA
-      if (actCa === 1) {
+      const isDemiFond = act?.name.toLowerCase().includes('demi') || act?.name.toLowerCase().includes('fond') || act?.name.toLowerCase().includes('temps juste');
+
+      if (isDemiFond) {
+        fieldsToUse = [
+          {
+            id: generateId(),
+            label: 'Course au Temps Juste (4 x 5\')',
+            type: 'running_exact_time',
+            options: {
+              blockCount: 4,
+              blockDurationSeconds: 300,
+              presetsDistances: [700, 750, 800, 850, 900, 950, 1000, 1050, 1100, 1150, 1200]
+            }
+          }
+        ];
+      } else if (actCa === 1) {
         fieldsToUse = [
           { id: generateId(), label: 'Performance / Résultat', type: 'number', options: { units: 'pts/m' } },
           { id: generateId(), label: 'Essais réussis', type: 'counter' },
@@ -432,11 +446,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    const isDemiFondAct = act?.name.toLowerCase().includes('demi') || act?.name.toLowerCase().includes('fond') || act?.name.toLowerCase().includes('temps juste');
     const newSheetId = generateId();
     const newSheet: ObservationSheet = {
       id: newSheetId,
       activityId,
-      name: sheetName || `Situation 1 - Observation ${act?.name || 'EPS'}`,
+      name: sheetName || (isDemiFondAct ? 'Demi-Fond - Course au Temps Juste (4 x 5\')' : `Situation 1 - Observation ${act?.name || 'EPS'}`),
       isMultiStudent: false,
       fields: fieldsToUse
     };

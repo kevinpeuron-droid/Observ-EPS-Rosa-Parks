@@ -18,6 +18,8 @@ import { Import } from './pages/Import';
 import { Library } from './pages/Library';
 import { LibraryDetail } from './pages/LibraryDetail';
 import { TeacherSessionEntry } from './pages/TeacherSessionEntry';
+import { EvaluationMode } from './pages/EvaluationMode';
+import { EvaluationsList } from './pages/EvaluationsList';
 
 export default function App() {
   return (
@@ -31,6 +33,10 @@ export default function App() {
             <Route path="class/:classId" element={<ClassDetail />} />
             <Route path="class/:classId/synthesis" element={<ClassSynthesis />} />
             <Route path="activity/:activityId" element={<ActivityDetail />} />
+            <Route path="activity/:activityId/evaluation" element={<EvaluationMode />} />
+            <Route path="evaluation/:activityId" element={<EvaluationMode />} />
+            <Route path="evaluations" element={<EvaluationsList />} />
+            <Route path="evaluation" element={<EvaluationsList />} />
             <Route path="session/:sessionId" element={<SessionDetail />} />
             <Route path="session/:sessionId/entry" element={<TeacherSessionEntry />} />
             <Route path="student/:studentId/class/:classId" element={<StudentDetail />} />
