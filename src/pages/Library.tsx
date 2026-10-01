@@ -12,7 +12,8 @@ import {
   Edit2, 
   Database, 
   Sparkles,
-  Layers
+  Layers,
+  Award
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { UpdateDatabaseModal } from '../components/UpdateDatabaseModal';
@@ -60,18 +61,47 @@ export function Library() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
             <LibraryIcon className="w-8 h-8 text-indigo-600" />
-            Banque d'activités (Modèles EPS)
+            Banque d'activités & Situations EPS
           </h1>
           <p className="text-slate-500 mt-1">Créez, modifiez et synchronisez vos modèles d'activités et situations par Champ d'Apprentissage.</p>
         </div>
 
-        <Button
-          onClick={() => setIsUpdateDbOpen(true)}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm shrink-0"
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to="/evaluation?tab=bank">
+            <Button
+              variant="outline"
+              className="border-amber-300 text-amber-900 hover:bg-amber-50 font-bold text-xs shadow-xs"
+            >
+              <Award className="w-4 h-4 mr-1.5 text-amber-600" />
+              Aller à la Banque d'évaluations
+            </Button>
+          </Link>
+
+          <Button
+            onClick={() => setIsUpdateDbOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm shrink-0 text-xs font-bold"
+          >
+            <Database className="w-4 h-4 mr-1.5" />
+            Mettre à jour la base
+          </Button>
+        </div>
+      </div>
+
+      {/* Switcher Tab bar */}
+      <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
+        <button
+          className="flex-1 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black bg-white text-indigo-700 shadow-sm border border-slate-200/80 flex items-center justify-center gap-2"
         >
-          <Database className="w-4 h-4 mr-2" />
-          Mettre à jour la base de données
-        </Button>
+          <LibraryIcon className="w-4 h-4 text-indigo-600" />
+          Banque de situations (Fiches d'observation)
+        </button>
+        <Link 
+          to="/evaluation?tab=bank"
+          className="flex-1 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-600 hover:text-slate-900 hover:bg-white/60 transition-colors flex items-center justify-center gap-2"
+        >
+          <Award className="w-4 h-4 text-amber-500" />
+          Banque d'évaluations (Barèmes sommatifs sur 20 pts)
+        </Link>
       </div>
 
       {/* Creation card */}

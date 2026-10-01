@@ -1,4 +1,4 @@
-import { Activity, ClassGroup, EvaluationCriterion, ObservationRecord } from '../types';
+import { Activity, ClassGroup, EvaluationCriterion, ObservationRecord, CriterionLevel, Session } from '../types';
 export { 
   formatSecondsToMMSS, 
   parseMMSSToSeconds, 
@@ -263,7 +263,52 @@ export function calculateClassEvaluationStatistics(
 }
 
 /**
+ * Récupère ou génère les 4 paliers d'observation (« Ce qui est fait ») pour un critère
+ * Transforme automatiquement chaque palier en note chiffrée selon le barème maxScore
+ */
+export function getCriterionLevels(criterion: EvaluationCriterion): CriterionLevel[] {
+  if (criterion.levels && criterion.levels.length === 4) {
+    return criterion.levels;
+  }
+
+  const max = Number(criterion.maxScore) || 20;
+  const p1 = Math.round(max * 0.25 * 2) / 2;
+  const p2 = Math.round(max * 0.50 * 2) / 2;
+  const p3 = Math.round(max * 0.75 * 2) / 2;
+  const p4 = max;
+
+  return [
+    {
+      level: 1,
+      label: 'Maîtrise insuffisante',
+      descriptor: `Non acquis / Discontinu : L'élève est en difficulté sur « ${criterion.label} ». L'effort est heurté, interrompu ou non maîtrisé.`,
+      points: p1
+    },
+    {
+      level: 2,
+      label: 'Maîtrise fragile',
+      descriptor: `En cours d'acquisition : Réalisation partielle de « ${criterion.label} ». Des erreurs techniques ou des arrêts ponctuels sont observés.`,
+      points: p2
+    },
+    {
+      level: 3,
+      label: 'Maîtrise satisfaisante',
+      descriptor: `Acquis / Attendu du cycle : L'élève réalise « ${criterion.label} » avec régularité, continuité et respect des règles et contrats.`,
+      points: p3
+    },
+    {
+      level: 4,
+      label: 'Très bonne maîtrise',
+      descriptor: `Dépassé / Remarquable : Réalisation fluide, efficiente et autonome sur « ${criterion.label} ». Rôle moteur et capacité à analyser sa pratique.`,
+      points: p4
+    }
+  ];
+}
+
+/**
  * Suggestions de critères par défaut selon le Champ d'Apprentissage (CA) ou l'activité
+ * Chaque critère intègre ses 4 paliers d'observation concrets (« Ce qui est fait »)
+ * et leurs points calculés selon le barème officiel
  */
 export function getDefaultCriteriaForCa(ca?: number, activityName?: string): EvaluationCriterion[] {
   const genId = () => Math.random().toString(36).substring(2, 9);
@@ -282,28 +327,52 @@ export function getDefaultCriteriaForCa(ca?: number, activityName?: string): Eva
         label: 'Régularité & Allure (Temps de Marche TM < 30s)', 
         maxScore: 6, 
         weight: 1, 
-        description: 'Continuité de course sans marcher sur les 4 blocs de 5 min (TM total < 30s = 6 pts, profil Adaptatif = 4.5 pts, Sur-estimé = 2.5 pts)' 
+        description: 'Continuité de course sans marcher sur les 4 blocs de 5 min (TM total < 30s = 6 pts, profil Adaptatif = 4.5 pts, Sur-estimé = 2.5 pts)',
+        levels: [
+          { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Sur-estimé / Arrêts répétés : Marche totale > 2 min sur les 4 blocs, allure heurtée, contrat non tenu.', points: 2.5 },
+          { level: 2, label: 'Maîtrise fragile', descriptor: 'Prudent / Irrégulier : Marche cumulée entre 1 et 2 min, difficulté à maintenir l\'allure de course.', points: 3.5 },
+          { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Adaptatif / Régulé : Marche cumulée entre 30s et 1 min, relances efficaces pour terminer l\'effort.', points: 4.5 },
+          { level: 4, label: 'Très bonne maîtrise', descriptor: 'Régulier / Continu : Marche totale < 30s (ou 0s), course continue aisée sur les 4 blocs de 5 min.', points: 6.0 }
+        ]
       },
       { 
         id: genId(), 
         label: 'Performance & Vitesse réelle de course (km/h)', 
         maxScore: 8, 
         weight: 1, 
-        description: 'Distance totale cumulée et vitesse réelle effective de course calculée sur le Temps de Course Effectif (TCE)' 
+        description: 'Distance totale cumulée et vitesse réelle effective de course calculée sur le Temps de Course Effectif (TCE)',
+        levels: [
+          { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Vitesse de course faible (< 8 km/h), allure assimilable à de la marche rapide.', points: 2.0 },
+          { level: 2, label: 'Maîtrise fragile', descriptor: 'Vitesse modérée (8 à 10.5 km/h), maintien de l\'effort difficile.', points: 4.0 },
+          { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Vitesse soutenue (10.5 à 13 km/h), allure de course effective stabilisée.', points: 6.0 },
+          { level: 4, label: 'Très bonne maîtrise', descriptor: 'Vitesse élevée (> 13 km/h), engagement moteur optimal sur les 20 min d\'épreuve.', points: 8.0 }
+        ]
       },
       { 
         id: genId(), 
         label: 'Lucidité & Régulation du contrat visé', 
         maxScore: 4, 
         weight: 1, 
-        description: 'Alerte sur-régime détectée (TM > 30s) : Choix d\'adaptation du contrat (Maintien ou Réduction) pour terminer l\'effort' 
+        description: 'Alerte sur-régime détectée (TM > 30s) : Choix d\'adaptation du contrat (Maintien ou Réduction) pour terminer l\'effort',
+        levels: [
+          { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Ne réagit pas à l\'essoufflement, s\'obstine sur un contrat irréaliste et finit épuisé.', points: 1.0 },
+          { level: 2, label: 'Maîtrise fragile', descriptor: 'Réaction tardive face à la fatigue, ajustement du contrat mal calibré.', points: 2.0 },
+          { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Alerte sur-régime prise en compte : réduction lucide du contrat pour terminer l\'effort.', points: 3.0 },
+          { level: 4, label: 'Très bonne maîtrise', descriptor: 'Anticipation remarquable de ses capacités, contrat initial parfaitement tenu ou régulé avec précision.', points: 4.0 }
+        ]
       },
       { 
         id: genId(), 
         label: 'Rôle d\'élève-observateur & co-pilote', 
         maxScore: 2, 
         weight: 1, 
-        description: 'Chronométrage rigoureux (TCE), calcul des temps de marche et accompagnement lucide apporté au coureur' 
+        description: 'Chronométrage rigoureux (TCE), calcul des temps de marche et accompagnement lucide apporté au coureur',
+        levels: [
+          { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Distrait, relevés incomplets, temps de course ou de marche non chronométrés.', points: 0.5 },
+          { level: 2, label: 'Maîtrise fragile', descriptor: 'Chronométrage avec l\'aide de l\'enseignant, calculs approximatifs.', points: 1.0 },
+          { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Chronométrage rigoureux (TCE), calcul exact des temps de marche et annonce des passages.', points: 1.5 },
+          { level: 4, label: 'Très bonne maîtrise', descriptor: 'Co-pilote exemplaire : encouragements soutenus, conseil stratégique pertinent et fiche impeccable.', points: 2.0 }
+        ]
       }
     ];
   }
@@ -311,35 +380,239 @@ export function getDefaultCriteriaForCa(ca?: number, activityName?: string): Eva
   switch (ca) {
     case 2:
       return [
-        { id: genId(), label: 'Validation des balises / Réussite', maxScore: 8, weight: 1, description: 'Nombre de postes poinçonnés ou cotation des voies réussies' },
-        { id: genId(), label: 'Respect de la sécurité & Protocoles', maxScore: 6, weight: 1, description: 'Règles de sécurité, parade, assurage et respect du temps limite' },
-        { id: genId(), label: 'Choix d\'itinéraires & Stratégie', maxScore: 6, weight: 1, description: 'Fluidité, lecture du milieu et adaptation face aux imprévus' }
+        { 
+          id: genId(), 
+          label: 'Validation des balises / Voies réussies', 
+          maxScore: 8, 
+          weight: 1, 
+          description: 'Nombre de postes poinçonnés ou cotation des voies réussies',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Moins de 35% de réussite, échec sur les premières balises ou premières voies.', points: 2.0 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: '35% à 60% de réussite, réussite sur des parcours ou voies guidées uniquement.', points: 4.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: '60% à 85% de réussite dans les temps impartis, voies de niveau attendu validées.', points: 6.0 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Plus de 85% de réussite, parcours optimisé ou voies complexes réussies en fluidité.', points: 8.0 }
+          ]
+        },
+        { 
+          id: genId(), 
+          label: 'Respect de la sécurité & Protocoles', 
+          maxScore: 6, 
+          weight: 1, 
+          description: 'Règles de sécurité, parade, assurage et respect du temps limite',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Règles de sécurité enfreintes, mise en danger ou retour hors temps limite.', points: 1.5 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Sécurité respectée seulement après intervention ou rappel de l\'enseignant.', points: 3.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Respect strict et autonome des consignes de sécurité, de parade ou d\'assurage.', points: 4.5 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Vigilance active constante, sécurisation de soi et de ses partenaires, zéro faute.', points: 6.0 }
+          ]
+        },
+        { 
+          id: genId(), 
+          label: 'Choix d\'itinéraires & Stratégie', 
+          maxScore: 6, 
+          weight: 1, 
+          description: 'Fluidité, lecture du milieu et adaptation face aux imprévus',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Déplacements au hasard, hésitations permanentes, pas de lecture de carte ou de prise.', points: 1.5 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Choix hésitants, arrêts fréquents, difficulté à anticiper le tracé.', points: 3.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Choix d\'itinéraires logiques (lignes directrices, points d\'attaque, lecture de voie).', points: 4.5 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Anticipation remarquable du milieu, rythme fluide et adaptation immédiate aux imprévus.', points: 6.0 }
+          ]
+        }
       ];
     case 3:
       return [
-        { id: genId(), label: 'Difficulté et variété technique', maxScore: 8, weight: 1, description: 'Éléments techniques maîtrisés, pyramides ou figures présentées' },
-        { id: genId(), label: 'Composition & Synchronisation', maxScore: 6, weight: 1, description: 'Liaisons, fluidité, occupation de l\'espace et coordination du groupe' },
-        { id: genId(), label: 'Interprétation & Expressivité', maxScore: 6, weight: 1, description: 'Tenue corporelle, regard, émotion et réception stabilisée' }
+        { 
+          id: genId(), 
+          label: 'Difficulté et variété technique', 
+          maxScore: 8, 
+          weight: 1, 
+          description: 'Éléments techniques maîtrisés, pyramides ou figures présentées',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Éléments techniques instables, pyramides ou figures non tenues (< 3s).', points: 2.0 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Figures simples réussies mais manque de variété et instabilités motrices.', points: 4.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Figures conformes au niveau du cycle, tenues stabilisées 3s sans trembler.', points: 6.0 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Difficulté motrice élevée, propreté technique et variété des éléments présentés.', points: 8.0 }
+          ]
+        },
+        { 
+          id: genId(), 
+          label: 'Composition & Synchronisation', 
+          maxScore: 6, 
+          weight: 1, 
+          description: 'Liaisons, fluidité, occupation de l\'espace et coordination du groupe',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Juxtaposition d\'éléments sans liaison, désynchronisation et hésitations.', points: 1.5 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Liaisons simples, synchronisation approximative avec des temps morts.', points: 3.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Enchaînement fluide, utilisation réfléchie de l\'espace et coordination collective.', points: 4.5 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Composition originale, synchronisation millimétrée et transitions chorégraphiques riches.', points: 6.0 }
+          ]
+        },
+        { 
+          id: genId(), 
+          label: 'Interprétation & Expressivité', 
+          maxScore: 6, 
+          weight: 1, 
+          description: 'Tenue corporelle, regard, émotion et réception stabilisée',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Regard fuyant, relâchement postural, posture passive.', points: 1.5 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Tenue corporelle correcte par intermittence, peu d\'intention expressive.', points: 3.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Posture tonique, regard orienté vers le public/jury, fin d\'enchaînement affirmée.', points: 4.5 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Présence scénique remarquable, expressivité et musicalité captivantes.', points: 6.0 }
+          ]
+        }
       ];
     case 4:
       return [
-        { id: genId(), label: 'Efficacité dans le rapport de force', maxScore: 8, weight: 1, description: 'Score de match, points gagnés et rupture de l\'échange' },
-        { id: genId(), label: 'Choix tactiques & Prise de décision', maxScore: 6, weight: 1, description: 'Jeu dans les espaces libres, variété des trajectoires et passes' },
-        { id: genId(), label: 'Placement, replacement & Défense', maxScore: 4, weight: 1, description: 'Anticipation, repli défensif et attitude active' },
-        { id: genId(), label: 'Arbitrage et esprit d\'équipe', maxScore: 2, weight: 1, description: 'Rôle d\'arbitre officiel, tenue de la feuille et fair-play' }
+        { 
+          id: genId(), 
+          label: 'Efficacité dans le rapport de force', 
+          maxScore: 8, 
+          weight: 1, 
+          description: 'Score de match, points gagnés et rupture de l\'échange',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Subit les échanges, nombreuses fautes directes, score très défavorable.', points: 2.0 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Renvoie au centre de manière neutre sans menacer l\'adversaire.', points: 4.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Vise les zones libres, provoque la faute adverse, victoires régulières en match.', points: 6.0 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Domine le jeu, variations de frappes (amorti/smash/passes), ratio victoires élevé.', points: 8.0 }
+          ]
+        },
+        { 
+          id: genId(), 
+          label: 'Choix tactiques & Prise de décision', 
+          maxScore: 6, 
+          weight: 1, 
+          description: 'Jeu dans les espaces libres, variété des trajectoires et passes',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Jeu précipité, sans intention tactique, choix souvent contraires au jeu.', points: 1.5 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Intention de jouer dans les espaces libres mais réalisation motrice imprécise.', points: 3.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Alternance efficace court/long ou gauche/droite, jeu adapté au placement adverse.', points: 4.5 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Anticipation tactique permanente, feintes de frappes et gestion lucide du score.', points: 6.0 }
+          ]
+        },
+        { 
+          id: genId(), 
+          label: 'Placement, replacement & Défense', 
+          maxScore: 4, 
+          weight: 1, 
+          description: 'Anticipation, repli défensif et attitude active',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Reste statique après avoir joué la balle/volant, passif en phase défensive.', points: 1.0 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Replacement tardif, souvent pris à contre-pied sur les retours adverses.', points: 2.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Replacement dynamique au centre après chaque action, posture active.', points: 3.0 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Déplacements vifs, couverture complète du terrain et jeu de jambes irréprochable.', points: 4.0 }
+          ]
+        },
+        { 
+          id: genId(), 
+          label: 'Arbitrage et esprit d\'équipe', 
+          maxScore: 2, 
+          weight: 1, 
+          description: 'Rôle d\'arbitre officiel, tenue de la feuille et fair-play',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Méconnaissance des règles, contestations ou refus d\'arbitrer.', points: 0.5 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Arbitrage hésitant nécessitant les interventions de l\'enseignant.', points: 1.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Arbitrage sérieux, annonce claire du score et respect des décisions.', points: 1.5 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Arbitre exemplaire et autonome, gestion calme et pédagogique des litiges.', points: 2.0 }
+          ]
+        }
       ];
     case 5:
       return [
-        { id: genId(), label: 'Projet d\'entraînement personnel', maxScore: 8, weight: 1, description: 'Conception et réalisation de séries adaptées au mobile visé' },
-        { id: genId(), label: 'Mesure & Écoute corporelle', maxScore: 6, weight: 1, description: 'Zone cible de Fréquence Cardiaque et régulation de l\'intensité' },
-        { id: genId(), label: 'Posture, respiration & Sécurité', maxScore: 4, weight: 1, description: 'Gainage, trajet technique et placement articulaire' },
-        { id: genId(), label: 'Bilan critique et perspectives', maxScore: 2, weight: 1, description: 'Analyse du ressenti et ajustement pour les futures séances' }
+        { 
+          id: genId(), 
+          label: 'Projet d\'entraînement personnel', 
+          maxScore: 8, 
+          weight: 1, 
+          description: 'Conception et réalisation de séries adaptées au mobile visé',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Charges ou allures inadaptées, absence de projet cohérent.', points: 2.0 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Projet approximatif, régulation uniquement après consigne du professeur.', points: 4.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Respect scrupuleux des charges, répétitions et allures définies pour le mobile.', points: 6.0 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Projet personnalisé optimisé, analyse lucide des sensations et adaptation fine.', points: 8.0 }
+          ]
+        },
+        { 
+          id: genId(), 
+          label: 'Mesure & Écoute corporelle', 
+          maxScore: 6, 
+          weight: 1, 
+          description: 'Zone cible de Fréquence Cardiaque et régulation de l\'intensité',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Ignorance de la FC, sur-régime ou sous-régime flagrant.', points: 1.5 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Prise de pouls approximative, difficulté à maintenir la zone cible.', points: 3.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Maintien régulier dans la zone cible de FC, gestion lucide de la respiration.', points: 4.5 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Régulation parfaite de l\'effort à l\'écoute de son corps, aisance ventilatoire.', points: 6.0 }
+          ]
+        },
+        { 
+          id: genId(), 
+          label: 'Posture, respiration & Sécurité', 
+          maxScore: 4, 
+          weight: 1, 
+          description: 'Gainage, trajet technique et placement articulaire',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Défauts posturaux dangereux (dos cambré, apnée, gestes brusques).', points: 1.0 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Gainage discontinu, respiration parfois inversée.', points: 2.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Alignement postural correct, expiration à l\'effort et placement sécurisé.', points: 3.0 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Placement biomécanique impeccable, contrôle moteur total et rôle de pareur actif.', points: 4.0 }
+          ]
+        },
+        { 
+          id: genId(), 
+          label: 'Bilan critique et perspectives', 
+          maxScore: 2, 
+          weight: 1, 
+          description: 'Analyse du ressenti et ajustement pour les futures séances',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Bilan vide ou non renseigné, aucune prise de recul.', points: 0.5 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Commentaires superficiels, ressenti d\'effort peu explicité.', points: 1.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Analyse cohérente du ressenti d\'effort (RPE) et identification des progrès.', points: 1.5 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Regard critique pointu sur son travail et propositions pertinentes pour la suite.', points: 2.0 }
+          ]
+        }
       ];
     default:
       return [
-        { id: genId(), label: 'Compétence motrice principale', maxScore: 10, weight: 1, description: 'Niveau technique et performance' },
-        { id: genId(), label: 'Compétence méthodologique et sociale', maxScore: 6, weight: 1, description: 'Régularité, engagement et sécurité' },
-        { id: genId(), label: 'Rôles sociaux (arbitre, observateur)', maxScore: 4, weight: 1, description: 'Coopération et écoute' }
+        { 
+          id: genId(), 
+          label: 'Compétence motrice principale', 
+          maxScore: 10, 
+          weight: 1, 
+          description: 'Niveau technique et performance',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Réalisation heurtée, non maîtrisée ou inférieure aux attendus.', points: 2.5 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Réalisation en cours d\'acquisition, des erreurs techniques récurrentes.', points: 5.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Réalisation stabilisée et efficace, conforme aux attendus du cycle.', points: 7.5 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Réalisation fluide, remarquable et d\'une grande efficience motrice.', points: 10.0 }
+          ]
+        },
+        { 
+          id: genId(), 
+          label: 'Compétence méthodologique et sociale', 
+          maxScore: 6, 
+          weight: 1, 
+          description: 'Régularité, engagement et sécurité',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Engagement faible, manque d\'autonomie ou de respect des consignes.', points: 1.5 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Engagement irrégulier, a besoin de sollicitations pour rester actif.', points: 3.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Engagement constant, respect scrupuleux des consignes et du matériel.', points: 4.5 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Autonomie exemplaire, force de proposition et esprit d\'initiative.', points: 6.0 }
+          ]
+        },
+        { 
+          id: genId(), 
+          label: 'Rôles sociaux (arbitre, observateur)', 
+          maxScore: 4, 
+          weight: 1, 
+          description: 'Coopération et écoute',
+          levels: [
+            { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Refus ou incapacité à tenir le rôle d\'arbitre ou d\'observateur.', points: 1.0 },
+            { level: 2, label: 'Maîtrise fragile', descriptor: 'Rôle tenu avec des hésitations ou besoin d\'assistance.', points: 2.0 },
+            { level: 3, label: 'Maîtrise satisfaisante', descriptor: 'Rôle assumé avec sérieux, relevés fiables et attitude bienveillante.', points: 3.0 },
+            { level: 4, label: 'Très bonne maîtrise', descriptor: 'Rôle tenu avec autorité et bienveillance, conseil avisé auprès de ses pairs.', points: 4.0 }
+          ]
+        }
       ];
   }
 }

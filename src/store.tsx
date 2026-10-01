@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Activity, ClassGroup, ObservationRecord, ObservationSheet, Session, TemplateActivity, TemplateSheet, ObservationField, AppSettings, ObservationFieldType, StudentSessionStatus } from './types';
+import { Activity, ClassGroup, ObservationRecord, ObservationSheet, Session, TemplateActivity, TemplateSheet, ObservationField, AppSettings, ObservationFieldType, StudentSessionStatus, EvaluationCriterion } from './types';
 import { db } from './lib/firebase';
 import { doc, collection, onSnapshot, setDoc, addDoc, getDocs, writeBatch, deleteDoc, updateDoc } from 'firebase/firestore';
 import { generateEpsReferenceDatabase } from './lib/epsDatabase';
@@ -44,8 +44,8 @@ interface StoreContextType extends StoreState {
   addActivity: (act: Omit<Activity, 'id'>) => void;
   updateActivity: (id: string, act: Partial<Activity>) => void;
   deleteActivity: (id: string) => Promise<void>;
-  createCustomActivity: (classId: string, name: string, ca?: 1 | 2 | 3 | 4 | 5) => void;
-  addActivityFromTemplate: (classId: string, templateId: string) => void;
+  createCustomActivity: (classId: string, name: string, ca?: 1 | 2 | 3 | 4 | 5) => string;
+  addActivityFromTemplate: (classId: string, templateId: string) => string;
   syncActivityFromTemplate: (activityId: string, templateId: string, mode: 'merge_missing' | 'replace') => void;
   
   addSession: (session: Omit<Session, 'id'>) => void;
@@ -68,9 +68,11 @@ interface StoreContextType extends StoreState {
   saveStudentFullObservation: (sessionId: string, targetId: string, data: Record<string, any>, extra?: { status?: StudentSessionStatus; noGear?: boolean; bilan?: string; perspectives?: string }) => Promise<void>;
   clearObservations: (sessionId: string) => void;
   
-  addTemplateActivity: (name: string, ca?: 1 | 2 | 3 | 4 | 5) => void;
+  addTemplateActivity: (name: string, ca?: 1 | 2 | 3 | 4 | 5, criteria?: EvaluationCriterion[]) => string;
   updateTemplateActivity: (id: string, updates: Partial<TemplateActivity>) => void;
   deleteTemplateActivity: (id: string) => void;
+  duplicateTemplateActivity: (id: string) => string;
+  saveActivityAsTemplate: (activityId: string) => string;
   addTemplateSheet: (templateActivityId: string, name: string, isMultiStudent?: boolean) => void;
   updateTemplateSheet: (id: string, updates: Partial<TemplateSheet>) => void;
   deleteTemplateSheet: (id: string) => void;
@@ -276,23 +278,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const createCustomActivity = (classId: string, name: string, ca?: 1 | 2 | 3 | 4 | 5) => {
+  const createCustomActivity = (classId: string, name: string, ca?: 1 | 2 | 3 | 4 | 5): string => {
+    const newId = generateId();
     updateWorkspace(s => ({
       activities: [...(s.activities || []), {
-        id: generateId(),
+        id: newId,
         classId,
         name,
         ca: ca || 1
       }]
     }));
+    return newId;
   };
 
-  const addActivityFromTemplate = (classId: string, templateId: string) => {
+  const addActivityFromTemplate = (classId: string, templateId: string): string => {
+    const newActivityId = generateId();
     updateWorkspace(s => {
       const template = s.templateActivities.find(t => t.id === templateId);
       if (!template) return {};
 
-      const newActivityId = generateId();
       const newActivity: Activity = { 
         id: newActivityId, 
         classId, 
@@ -316,6 +320,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         sheets: [...(s.sheets || []), ...newSheets]
       };
     });
+    return newActivityId;
   };
 
   const syncActivityFromTemplate = (activityId: string, templateId: string, mode: 'merge_missing' | 'replace') => {
@@ -607,8 +612,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   // Templates
-  const addTemplateActivity = (name: string, ca: 1 | 2 | 3 | 4 | 5 = 1) => {
-    updateWorkspace(s => ({ templateActivities: [...s.templateActivities, { id: generateId(), name, ca }] }));
+  const addTemplateActivity = (name: string, ca: 1 | 2 | 3 | 4 | 5 = 1, criteria?: EvaluationCriterion[]): string => {
+    const newId = generateId();
+    updateWorkspace(s => ({ 
+      templateActivities: [
+        ...s.templateActivities, 
+        { 
+          id: newId, 
+          name, 
+          ca,
+          evaluationCriteria: criteria || []
+        }
+      ] 
+    }));
+    return newId;
   };
 
   const updateTemplateActivity = (id: string, updates: Partial<TemplateActivity>) => {
@@ -622,6 +639,63 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       templateActivities: s.templateActivities.filter(t => t.id !== id),
       templateSheets: s.templateSheets.filter(ts => ts.templateActivityId !== id)
     }));
+  };
+
+  const duplicateTemplateActivity = (id: string): string => {
+    const newId = generateId();
+    updateWorkspace(s => {
+      const original = s.templateActivities.find(t => t.id === id);
+      if (!original) return {};
+      const newTemplate: TemplateActivity = {
+        ...original,
+        id: newId,
+        name: `${original.name} (Copie)`,
+        evaluationCriteria: original.evaluationCriteria 
+          ? original.evaluationCriteria.map(c => ({ ...c, id: generateId() })) 
+          : []
+      };
+      const matchingSheets = s.templateSheets.filter(ts => ts.templateActivityId === id);
+      const newSheets: TemplateSheet[] = matchingSheets.map(ts => ({
+        ...ts,
+        id: generateId(),
+        templateActivityId: newId,
+        fields: (ts.fields || []).map(f => ({ ...f, id: generateId() }))
+      }));
+      return {
+        templateActivities: [...s.templateActivities, newTemplate],
+        templateSheets: [...s.templateSheets, ...newSheets]
+      };
+    });
+    return newId;
+  };
+
+  const saveActivityAsTemplate = (activityId: string): string => {
+    const newId = generateId();
+    updateWorkspace(s => {
+      const act = s.activities.find(a => a.id === activityId);
+      if (!act) return {};
+      const newTemplate: TemplateActivity = {
+        id: newId,
+        name: act.name,
+        ca: act.ca || 1,
+        evaluationCriteria: act.evaluationCriteria && act.evaluationCriteria.length > 0
+          ? act.evaluationCriteria.map(c => ({ ...c, id: generateId() }))
+          : []
+      };
+      const actSheets = s.sheets.filter(sh => sh.activityId === activityId);
+      const newSheets: TemplateSheet[] = actSheets.map(sh => ({
+        id: generateId(),
+        templateActivityId: newId,
+        name: sh.name,
+        isMultiStudent: sh.isMultiStudent || false,
+        fields: (sh.fields || []).map(f => ({ ...f, id: generateId() }))
+      }));
+      return {
+        templateActivities: [...s.templateActivities, newTemplate],
+        templateSheets: [...s.templateSheets, ...newSheets]
+      };
+    });
+    return newId;
   };
 
   const addTemplateSheet = (templateActivityId: string, name: string, isMultiStudent = false) => {
@@ -739,6 +813,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addSheet, updateSheet, deleteSheet, createDefaultSheetForActivity, addFieldToSheet, removeFieldFromSheet, updateFieldInSheet,
     addObservation, updateObservation, setStudentSessionAttendance, setStudentObservationData, saveStudentFullObservation, clearObservations,
     addTemplateActivity, updateTemplateActivity, deleteTemplateActivity,
+    duplicateTemplateActivity, saveActivityAsTemplate,
     addTemplateSheet, updateTemplateSheet, deleteTemplateSheet,
     addFieldToTemplateSheet, removeFieldFromTemplateSheet, updateFieldInTemplateSheet,
     loadOfficialEpsDatabase,

@@ -16,12 +16,20 @@ export type ClassGroup = {
   teams?: Team[];
 };
 
+export type CriterionLevel = {
+  level: 1 | 2 | 3 | 4;
+  label: string; // 'Maîtrise insuffisante' | 'Maîtrise fragile' | 'Maîtrise satisfaisante' | 'Très bonne maîtrise'
+  descriptor: string; // Ce qui est fait / Comportement observable
+  points: number; // Note correspondante calculée selon le barème
+};
+
 export type EvaluationCriterion = {
   id: string;
   label: string;
   maxScore: number;
   weight: number;
   description?: string;
+  levels?: CriterionLevel[];
 };
 
 export type TemplateActivity = {
