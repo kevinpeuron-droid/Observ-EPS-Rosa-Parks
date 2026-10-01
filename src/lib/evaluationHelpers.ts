@@ -1,4 +1,4 @@
-import { Activity, ClassGroup, EvaluationCriterion, ObservationRecord, CriterionLevel, Session } from '../types';
+import { Activity, ClassGroup, EvaluationCriterion, ObservationRecord, CriterionLevel, Session, ScaleInterval, ValueMeasurementType } from '../types';
 export { 
   formatSecondsToMMSS, 
   parseMMSSToSeconds, 
@@ -306,6 +306,194 @@ export function getCriterionLevels(criterion: EvaluationCriterion): CriterionLev
 }
 
 /**
+ * Analyse et convertit une valeur observée saisie (nombre, chrono mm:ss, texte avec unité) en nombre exploitable
+ */
+export function parseObservedValue(val: number | string | undefined | null): number | null {
+  if (val === undefined || val === null || val === '') return null;
+  if (typeof val === 'number') {
+    return isNaN(val) ? null : val;
+  }
+  const str = String(val).trim();
+  if (str === 'A' || str === 'D') return null;
+
+  // Format mm:ss ou m:ss (ex: "01:25", "1:25", "02:10.5") -> conversion en secondes totales
+  const mmSsMatch = str.match(/^(\d+):(\d+(?:\.\d+)?)$/);
+  if (mmSsMatch) {
+    const mins = parseInt(mmSsMatch[1], 10);
+    const secs = parseFloat(mmSsMatch[2]);
+    return mins * 60 + secs;
+  }
+
+  // Nettoyage virgule -> point et extraction du nombre principal
+  const cleanStr = str.replace(',', '.');
+  const numMatch = cleanStr.match(/-?\d+(?:\.\d+)?/);
+  if (numMatch) {
+    const parsed = parseFloat(numMatch[0]);
+    return isNaN(parsed) ? null : parsed;
+  }
+
+  return null;
+}
+
+/**
+ * Calcule la note selon le barème du critère à partir de la valeur observée
+ * (temps, nombre de passes, répétitions, vitesse, distance, etc.)
+ */
+export function computeScoreFromObservedValue(
+  criterion: EvaluationCriterion,
+  rawValue: number | string | undefined | null
+): number | null {
+  if (rawValue === undefined || rawValue === null || rawValue === '') return null;
+  if (rawValue === 'A' || rawValue === 'D') return null;
+
+  const numericVal = parseObservedValue(rawValue);
+  if (numericVal === null) return null;
+
+  const maxScore = Number(criterion.maxScore) || 20;
+
+  // 1. Barème par intervalles / seuils (scaleIntervals)
+  if (criterion.scaleIntervals && criterion.scaleIntervals.length > 0) {
+    const intervals = criterion.scaleIntervals;
+    const isReverse = !!criterion.reverseScale; // Un chiffre plus petit est meilleur (ex: chronomètre, temps de marche)
+
+    const matched = intervals.find(interval => {
+      const hasMin = interval.min !== undefined && interval.min !== null;
+      const hasMax = interval.max !== undefined && interval.max !== null;
+
+      if (hasMin && hasMax) {
+        return numericVal >= interval.min! && numericVal <= interval.max!;
+      } else if (hasMin && !hasMax) {
+        return numericVal >= interval.min!;
+      } else if (!hasMin && hasMax) {
+        return numericVal <= interval.max!;
+      }
+      return false;
+    });
+
+    if (matched) {
+      return Math.max(0, Math.min(maxScore, matched.points));
+    }
+
+    // Hors bornes
+    if (isReverse) {
+      const sorted = [...intervals].sort((a, b) => (a.max ?? a.min ?? 0) - (b.max ?? b.min ?? 0));
+      const lowestLimit = sorted[0]?.min ?? sorted[0]?.max ?? 0;
+      if (numericVal < lowestLimit) {
+        return Math.max(0, Math.min(maxScore, sorted[0].points));
+      }
+      return Math.max(0, Math.min(maxScore, sorted[sorted.length - 1].points));
+    } else {
+      const sorted = [...intervals].sort((a, b) => (a.min ?? a.max ?? 0) - (b.min ?? b.max ?? 0));
+      const highestLimit = sorted[sorted.length - 1]?.max ?? sorted[sorted.length - 1]?.min ?? 0;
+      if (numericVal > highestLimit) {
+        return Math.max(0, Math.min(maxScore, sorted[sorted.length - 1].points));
+      }
+      return Math.max(0, Math.min(maxScore, sorted[0].points));
+    }
+  }
+
+  // 2. Barème qualitatif par paliers (1 à 4)
+  if (criterion.levels && criterion.levels.length > 0) {
+    const matchedLvl = criterion.levels.find(l => l.level === numericVal);
+    if (matchedLvl) {
+      return matchedLvl.points;
+    }
+  }
+
+  // 3. Fallback : valeur directe bornée au maxScore
+  return Math.max(0, Math.min(maxScore, Math.round(numericVal * 10) / 10));
+}
+
+/**
+ * Récupère l'intervalle du barème correspondant à la valeur observée
+ */
+export function getMatchingScaleInterval(
+  criterion: EvaluationCriterion,
+  rawValue: number | string | undefined | null
+): ScaleInterval | null {
+  const numericVal = parseObservedValue(rawValue);
+  if (numericVal === null || !criterion.scaleIntervals || criterion.scaleIntervals.length === 0) {
+    return null;
+  }
+
+  const isReverse = !!criterion.reverseScale;
+  const intervals = criterion.scaleIntervals;
+
+  const matched = intervals.find(interval => {
+    const hasMin = interval.min !== undefined && interval.min !== null;
+    const hasMax = interval.max !== undefined && interval.max !== null;
+
+    if (hasMin && hasMax) {
+      return numericVal >= interval.min! && numericVal <= interval.max!;
+    } else if (hasMin && !hasMax) {
+      return numericVal >= interval.min!;
+    } else if (!hasMin && hasMax) {
+      return numericVal <= interval.max!;
+    }
+    return false;
+  });
+
+  if (matched) return matched;
+
+  if (isReverse) {
+    const sorted = [...intervals].sort((a, b) => (a.max ?? a.min ?? 0) - (b.max ?? b.min ?? 0));
+    if (numericVal < (sorted[0]?.min ?? sorted[0]?.max ?? 0)) return sorted[0];
+    return sorted[sorted.length - 1];
+  } else {
+    const sorted = [...intervals].sort((a, b) => (a.min ?? a.max ?? 0) - (b.min ?? b.max ?? 0));
+    if (numericVal > (sorted[sorted.length - 1]?.max ?? sorted[sorted.length - 1]?.min ?? 0)) return sorted[sorted.length - 1];
+    return sorted[0];
+  }
+}
+
+/**
+ * Formate la valeur observée pour affichage clair avec son unité
+ */
+export function formatObservedValue(
+  criterion: EvaluationCriterion,
+  rawValue: number | string | undefined | null
+): string {
+  if (rawValue === undefined || rawValue === null || rawValue === '') return '';
+  if (rawValue === 'A') return 'Absent';
+  if (rawValue === 'D') return 'Dispensé';
+
+  const num = parseObservedValue(rawValue);
+  if (num === null) return String(rawValue);
+
+  if (criterion.measurementType === 'time_mm_ss') {
+    const mins = Math.floor(num / 60);
+    const secs = Math.round(num % 60);
+    return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  }
+
+  const unit = criterion.unit ? ` ${criterion.unit}` : '';
+  return `${num}${unit}`;
+}
+
+/**
+ * Incrémente ou décrémente la valeur observée d'un élément (temps mm:ss, secondes, nombre de passes, répétitions...)
+ */
+export function stepObservedValue(
+  criterion: EvaluationCriterion,
+  currentVal: number | string | undefined | null,
+  delta: number
+): string | number {
+  if (criterion.measurementType === 'time_mm_ss') {
+    const totalSecs = parseObservedValue(currentVal) ?? 0;
+    const nextSecs = Math.max(0, totalSecs + delta);
+    const m = Math.floor(nextSecs / 60);
+    const s = Math.round(nextSecs % 60);
+    return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  }
+
+  const num = parseObservedValue(currentVal) ?? 0;
+  const isSpeed = criterion.measurementType === 'speed' || criterion.unit?.toLowerCase().includes('km');
+  const stepAmount = isSpeed && Math.abs(delta) === 1 ? (delta > 0 ? 0.5 : -0.5) : delta;
+  const nextNum = Math.max(0, Math.round((num + stepAmount) * 10) / 10);
+  return nextNum;
+}
+
+/**
  * Suggestions de critères par défaut selon le Champ d'Apprentissage (CA) ou l'activité
  * Chaque critère intègre ses 4 paliers d'observation concrets (« Ce qui est fait »)
  * et leurs points calculés selon le barème officiel
@@ -328,6 +516,15 @@ export function getDefaultCriteriaForCa(ca?: number, activityName?: string): Eva
         maxScore: 6, 
         weight: 1, 
         description: 'Continuité de course sans marcher sur les 4 blocs de 5 min (TM total < 30s = 6 pts, profil Adaptatif = 4.5 pts, Sur-estimé = 2.5 pts)',
+        measurementType: 'time_seconds',
+        unit: 's',
+        reverseScale: true,
+        scaleIntervals: [
+          { min: 0, max: 30, points: 6.0, descriptor: 'TM total < 30s : Course continue aisée', level: 4 },
+          { min: 31, max: 60, points: 4.5, descriptor: 'TM entre 30s et 1 min : Adaptatif / Régulé', level: 3 },
+          { min: 61, max: 120, points: 3.5, descriptor: 'TM entre 1 et 2 min : Prudent / Irrégulier', level: 2 },
+          { min: 121, max: 9999, points: 2.5, descriptor: 'TM > 2 min : Arrêts répétés / Sur-estimé', level: 1 }
+        ],
         levels: [
           { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Sur-estimé / Arrêts répétés : Marche totale > 2 min sur les 4 blocs, allure heurtée, contrat non tenu.', points: 2.5 },
           { level: 2, label: 'Maîtrise fragile', descriptor: 'Prudent / Irrégulier : Marche cumulée entre 1 et 2 min, difficulté à maintenir l\'allure de course.', points: 3.5 },
@@ -341,6 +538,15 @@ export function getDefaultCriteriaForCa(ca?: number, activityName?: string): Eva
         maxScore: 8, 
         weight: 1, 
         description: 'Distance totale cumulée et vitesse réelle effective de course calculée sur le Temps de Course Effectif (TCE)',
+        measurementType: 'speed',
+        unit: 'km/h',
+        reverseScale: false,
+        scaleIntervals: [
+          { min: 13.0, max: 99, points: 8.0, descriptor: 'Vitesse ≥ 13.0 km/h : Engagement moteur optimal', level: 4 },
+          { min: 10.5, max: 12.9, points: 6.0, descriptor: 'Vitesse 10.5 à 12.9 km/h : Allure stabilisée', level: 3 },
+          { min: 8.0, max: 10.4, points: 4.0, descriptor: 'Vitesse 8.0 à 10.4 km/h : Vitesse modérée', level: 2 },
+          { min: 0, max: 7.9, points: 2.0, descriptor: 'Vitesse < 8.0 km/h : Allure marche rapide', level: 1 }
+        ],
         levels: [
           { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Vitesse de course faible (< 8 km/h), allure assimilable à de la marche rapide.', points: 2.0 },
           { level: 2, label: 'Maîtrise fragile', descriptor: 'Vitesse modérée (8 à 10.5 km/h), maintien de l\'effort difficile.', points: 4.0 },
@@ -386,6 +592,14 @@ export function getDefaultCriteriaForCa(ca?: number, activityName?: string): Eva
           maxScore: 8, 
           weight: 1, 
           description: 'Nombre de postes poinçonnés ou cotation des voies réussies',
+          measurementType: 'number',
+          unit: 'balises',
+          scaleIntervals: [
+            { min: 12, max: 99, points: 8.0, descriptor: '≥ 12 balises / voies réussies (> 85%)', level: 4 },
+            { min: 8, max: 11, points: 6.0, descriptor: '8 à 11 balises / voies réussies (60-85%)', level: 3 },
+            { min: 5, max: 7, points: 4.0, descriptor: '5 à 7 balises / voies réussies (35-60%)', level: 2 },
+            { min: 0, max: 4, points: 2.0, descriptor: '< 5 balises / voies (< 35%)', level: 1 }
+          ],
           levels: [
             { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Moins de 35% de réussite, échec sur les premières balises ou premières voies.', points: 2.0 },
             { level: 2, label: 'Maîtrise fragile', descriptor: '35% à 60% de réussite, réussite sur des parcours ou voies guidées uniquement.', points: 4.0 },
@@ -470,6 +684,14 @@ export function getDefaultCriteriaForCa(ca?: number, activityName?: string): Eva
           maxScore: 8, 
           weight: 1, 
           description: 'Score de match, points gagnés et rupture de l\'échange',
+          measurementType: 'number',
+          unit: 'passes',
+          scaleIntervals: [
+            { min: 15, max: 999, points: 8.0, descriptor: '≥ 15 passes / points marqués (domination nette)', level: 4 },
+            { min: 10, max: 14, points: 6.0, descriptor: '10 à 14 passes / points marqués (bon niveau)', level: 3 },
+            { min: 5, max: 9, points: 4.0, descriptor: '5 à 9 passes / points marqués (fragile)', level: 2 },
+            { min: 0, max: 4, points: 2.0, descriptor: '< 5 passes / points marqués (en difficulté)', level: 1 }
+          ],
           levels: [
             { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Subit les échanges, nombreuses fautes directes, score très défavorable.', points: 2.0 },
             { level: 2, label: 'Maîtrise fragile', descriptor: 'Renvoie au centre de manière neutre sans menacer l\'adversaire.', points: 4.0 },
@@ -525,6 +747,14 @@ export function getDefaultCriteriaForCa(ca?: number, activityName?: string): Eva
           maxScore: 8, 
           weight: 1, 
           description: 'Conception et réalisation de séries adaptées au mobile visé',
+          measurementType: 'number',
+          unit: 'rép',
+          scaleIntervals: [
+            { min: 12, max: 99, points: 8.0, descriptor: '≥ 12 répétitions maîtrisées à charge cible', level: 4 },
+            { min: 9, max: 11, points: 6.0, descriptor: '9 à 11 répétitions maîtrisées', level: 3 },
+            { min: 6, max: 8, points: 4.0, descriptor: '6 à 8 répétitions', level: 2 },
+            { min: 0, max: 5, points: 2.0, descriptor: '< 6 répétitions', level: 1 }
+          ],
           levels: [
             { level: 1, label: 'Maîtrise insuffisante', descriptor: 'Charges ou allures inadaptées, absence de projet cohérent.', points: 2.0 },
             { level: 2, label: 'Maîtrise fragile', descriptor: 'Projet approximatif, régulation uniquement après consigne du professeur.', points: 4.0 },

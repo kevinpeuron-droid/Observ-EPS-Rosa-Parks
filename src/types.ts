@@ -23,6 +23,24 @@ export type CriterionLevel = {
   points: number; // Note correspondante calculée selon le barème
 };
 
+export type ValueMeasurementType = 
+  | 'qualitative'   // Paliers qualitatifs (1 à 4)
+  | 'number'        // Nombre / Compteur (passes, répétitions, points marqués, balises...)
+  | 'time_seconds'  // Temps en secondes (chronomètre, temps de marche...)
+  | 'time_mm_ss'    // Temps en minutes:secondes (chrono course, natation...)
+  | 'distance'      // Distance en mètres (saut, lancer, course...)
+  | 'speed'         // Vitesse en km/h
+  | 'percentage';   // Pourcentage / Ratio (0 à 100%)
+
+export type ScaleInterval = {
+  id?: string;
+  min?: number; // Seuil minimum (inclusif)
+  max?: number; // Seuil maximum (inclusif)
+  points: number; // Note correspondante selon le barème
+  descriptor?: string; // Comportement / indication observable
+  level?: 1 | 2 | 3 | 4; // Degré socle associé (optionnel)
+};
+
 export type EvaluationCriterion = {
   id: string;
   label: string;
@@ -30,6 +48,12 @@ export type EvaluationCriterion = {
   weight: number;
   description?: string;
   levels?: CriterionLevel[];
+  
+  // Saisie quantitative de l'observation et barème automatique
+  measurementType?: ValueMeasurementType;
+  unit?: string; // ex: 'passes', 's', 'min:s', 'km/h', 'm', 'rép', '%'
+  scaleIntervals?: ScaleInterval[]; // Table de correspondance : valeur observée -> note
+  reverseScale?: boolean; // Vrai si un temps plus court est meilleur (ex: chronomètre)
 };
 
 export type TemplateActivity = {
@@ -85,6 +109,7 @@ export type Activity = {
   templateId?: string;
   evaluationCriteria?: EvaluationCriterion[];
   grades?: Record<string, Record<string, number | string>>; // studentId -> criterionId -> score (or 'A', 'D')
+  rawObservations?: Record<string, Record<string, number | string>>; // studentId -> criterionId -> raw value entered by observer (ex: 14 passes, 01:25 chrono, 11.5 km/h)
   studentAppreciations?: Record<string, string>; // studentId -> appréciation individualisée
   isEvaluationCompleted?: boolean;
   evaluationDate?: string;

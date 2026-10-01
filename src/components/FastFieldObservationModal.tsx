@@ -1,6 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { Student, EvaluationCriterion, ObservationRecord } from '../types';
-import { getCriterionLevels, calculateStudentEvaluation, getCompetenceLevel } from '../lib/evaluationHelpers';
+import { 
+  getCriterionLevels, 
+  calculateStudentEvaluation, 
+  getCompetenceLevel,
+  computeScoreFromObservedValue,
+  getMatchingScaleInterval,
+  formatObservedValue
+} from '../lib/evaluationHelpers';
 import { Button } from './ui/Button';
 import { 
   X, 
@@ -16,7 +23,10 @@ import {
   Users,
   Search,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Plus,
+  Minus,
+  Timer
 } from 'lucide-react';
 
 interface FastFieldObservationModalProps {
@@ -27,9 +37,11 @@ interface FastFieldObservationModalProps {
   students: Student[];
   criteria: EvaluationCriterion[];
   grades: Record<string, Record<string, number | string>>;
+  rawObservations?: Record<string, Record<string, number | string>>;
   appreciations: Record<string, string>;
   observations: ObservationRecord[];
   onScoreChange: (studentId: string, criterionId: string, score: number | string) => void;
+  onRawObservationChange?: (studentId: string, criterionId: string, val: number | string) => void;
   onAppreciationChange: (studentId: string, text: string) => void;
   onStatusChange: (studentId: string, status: 'present' | 'absent' | 'dispense') => void;
   initialStudentId?: string;
@@ -43,9 +55,11 @@ export function FastFieldObservationModal({
   students,
   criteria,
   grades,
+  rawObservations = {},
   appreciations,
   observations,
   onScoreChange,
+  onRawObservationChange,
   onAppreciationChange,
   onStatusChange,
   initialStudentId
@@ -66,6 +80,7 @@ export function FastFieldObservationModal({
   }, [students, studentSearch]);
 
   const currentStudentGrades = currentStudent ? (grades[currentStudent.id] || {}) : {};
+  const currentStudentRaw = currentStudent ? (rawObservations[currentStudent.id] || {}) : {};
   const currentStudentAppreciation = currentStudent ? (appreciations[currentStudent.id] || '') : '';
 
   // Student summary
@@ -89,6 +104,26 @@ export function FastFieldObservationModal({
     if (currentIndex > 0) {
       setSelectedStudentId(students[currentIndex - 1].id);
     }
+  };
+
+  const handleUpdateRawValue = (studentId: string, criterionId: string, val: string | number) => {
+    if (onRawObservationChange) {
+      onRawObservationChange(studentId, criterionId, val);
+    }
+    const crit = criteria.find(c => c.id === criterionId);
+    if (crit) {
+      const computedScore = computeScoreFromObservedValue(crit, val);
+      if (computedScore !== null) {
+        onScoreChange(studentId, criterionId, computedScore);
+      }
+    }
+  };
+
+  const handleStepValue = (studentId: string, crit: EvaluationCriterion, delta: number) => {
+    const rawVal = currentStudentRaw[crit.id];
+    const currentNum = parseFloat(String(rawVal || 0).replace(',', '.')) || 0;
+    const nextNum = Math.max(0, currentNum + delta);
+    handleUpdateRawValue(studentId, crit.id, nextNum);
   };
 
   // Completion stats
@@ -132,7 +167,7 @@ export function FastFieldObservationModal({
               <h2 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
                 <span>{activityName}</span>
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-indigo-200 font-normal">
-                  Grille d'observation ➔ Note barème automatique
+                  Saisie des valeurs observées (temps, passes...) ➔ Note calculée automatiquement
                 </span>
               </h2>
             </div>
@@ -305,7 +340,7 @@ export function FastFieldObservationModal({
             <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-900">
               <span className="font-bold flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
-                Observez ce que fait {currentStudent.name} sur chaque critère : cliquez sur le comportement observé pour appliquer directement la note du barème.
+                Saisissez la valeur observée (temps, passes, km/h, etc.) ou cliquez directement sur le palier correspondant : l'application calcule la note exacte du barème.
               </span>
               <span className="text-[11px] font-mono text-amber-800 bg-white px-2 py-0.5 rounded border border-amber-300">
                 Pondération totale : {studentSummary.totalWeightedScore} / {studentSummary.maxWeightedScore} pts
@@ -313,15 +348,24 @@ export function FastFieldObservationModal({
             </div>
 
             {/* Observation Criteria Cards */}
-            <div className="space-y-4">
+            <div className="space-y-5">
               {criteria.map((crit, cIdx) => {
                 const currentScore = currentStudentGrades[crit.id];
+                const currentRaw = currentStudentRaw[crit.id];
                 const levels = getCriterionLevels(crit);
+                const matchedInterval = currentRaw !== undefined && currentRaw !== '' ? getMatchingScaleInterval(crit, currentRaw) : null;
+                const unit = crit.unit || (
+                  crit.measurementType === 'number' ? 'passes' :
+                  crit.measurementType === 'time_seconds' ? 's' :
+                  crit.measurementType === 'time_mm_ss' ? 'min:s' :
+                  crit.measurementType === 'speed' ? 'km/h' :
+                  crit.measurementType === 'distance' ? 'm' : ''
+                );
 
                 return (
                   <div 
                     key={crit.id}
-                    className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden p-4 sm:p-5 space-y-3"
+                    className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden p-4 sm:p-5 space-y-4"
                   >
                     {/* Criterion Title and points */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
@@ -345,12 +389,93 @@ export function FastFieldObservationModal({
                         </span>
                         <span className="text-slate-300">•</span>
                         <div className="flex items-center gap-1.5 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
-                          <span className="text-xs font-bold text-indigo-700">Note attribuée :</span>
-                          <span className="font-mono font-black text-sm text-indigo-900">
+                          <span className="text-xs font-bold text-indigo-700">Note barème :</span>
+                          <span className="font-mono font-black text-sm text-indigo-950">
                             {currentScore !== undefined && currentScore !== '' ? currentScore : '—'}
                           </span>
                           <span className="text-xs text-indigo-400">/{crit.maxScore}</span>
                         </div>
+                      </div>
+                    </div>
+
+                    {/* ZONE DE SAISIE DE LA VALEUR OBSERVÉE (Temps, passes, km/h, etc.) */}
+                    <div className="p-3 bg-gradient-to-r from-indigo-50/50 via-slate-50 to-amber-50/40 rounded-xl border border-indigo-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black uppercase tracking-wider text-indigo-950 flex items-center gap-1">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                          Valeur observée sur le terrain :
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Steppers [-5] [-1] */}
+                        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => handleStepValue(currentStudent.id, crit, -5)}
+                            className="px-2 py-1 text-[11px] font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded"
+                            title="Diminuer de 5"
+                          >
+                            -5
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStepValue(currentStudent.id, crit, -1)}
+                            className="px-2 py-1 text-[11px] font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded"
+                            title="Diminuer de 1"
+                          >
+                            -1
+                          </button>
+                        </div>
+
+                        {/* Input direct */}
+                        <div className="flex items-center bg-white border border-slate-300 rounded-xl px-2 py-1 shadow-2xs">
+                          <input
+                            type="text"
+                            value={currentRaw !== undefined ? currentRaw : ''}
+                            onChange={e => handleUpdateRawValue(currentStudent.id, crit.id, e.target.value)}
+                            placeholder="0"
+                            className="w-16 text-center font-black font-mono text-sm text-slate-900 focus:outline-none"
+                          />
+                          <span className="text-xs font-bold text-slate-500 pl-1 pr-1">
+                            {unit}
+                          </span>
+                        </div>
+
+                        {/* Steppers [+1] [+5] */}
+                        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => handleStepValue(currentStudent.id, crit, 1)}
+                            className="px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50 rounded"
+                            title="Augmenter de 1"
+                          >
+                            +1
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStepValue(currentStudent.id, crit, 5)}
+                            className="px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50 rounded"
+                            title="Augmenter de 5"
+                          >
+                            +5
+                          </button>
+                        </div>
+
+                        {/* Conversion feedback badge */}
+                        {currentScore !== undefined && currentScore !== '' && (
+                          <div className="flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 text-xs">
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="font-bold text-emerald-900">
+                              Note calculée : <strong>{currentScore} / {crit.maxScore} pts</strong>
+                            </span>
+                            {matchedInterval && (
+                              <span className="text-[10px] text-emerald-700 font-medium pl-1 border-l border-emerald-200">
+                                {matchedInterval.descriptor || `Palier ${matchedInterval.level}`}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -390,10 +515,20 @@ export function FastFieldObservationModal({
                           }
                         }[lvl.level];
 
+                        // Find if interval exists for this level
+                        const matchingInterval = crit.scaleIntervals?.find(si => si.points === lvl.points || si.level === lvl.level);
+
                         return (
                           <div
                             key={lvl.level}
-                            onClick={() => onScoreChange(currentStudent.id, crit.id, lvl.points)}
+                            onClick={() => {
+                              onScoreChange(currentStudent.id, crit.id, lvl.points);
+                              // Sync representative raw value if exists
+                              if (matchingInterval && onRawObservationChange) {
+                                const repVal = matchingInterval.min !== undefined ? matchingInterval.min : (matchingInterval.max !== undefined ? matchingInterval.max : lvl.points);
+                                onRawObservationChange(currentStudent.id, crit.id, repVal);
+                              }
+                            }}
                             className={`p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between group ${
                               isSelected 
                                 ? levelThemes.bgSelected 
@@ -413,9 +548,15 @@ export function FastFieldObservationModal({
                               </div>
 
                               <div className="space-y-1">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                                  Ce qui est observé sur le terrain :
-                                </span>
+                                {matchingInterval && (
+                                  <div className="text-[10px] font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded inline-block">
+                                    {matchingInterval.min !== undefined && matchingInterval.max !== undefined
+                                      ? `${matchingInterval.min} à ${matchingInterval.max} ${unit}`
+                                      : matchingInterval.min !== undefined
+                                      ? `≥ ${matchingInterval.min} ${unit}`
+                                      : `≤ ${matchingInterval.max} ${unit}`}
+                                  </div>
+                                )}
                                 <p className={`text-xs font-semibold leading-relaxed ${isSelected ? levelThemes.text : 'text-slate-800'}`}>
                                   « {lvl.descriptor} »
                                 </p>
