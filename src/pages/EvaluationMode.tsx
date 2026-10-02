@@ -38,13 +38,19 @@ import {
   ArrowRight,
   BookmarkPlus,
   BookmarkCheck,
-  Eye
+  Eye,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
+  CheckSquare,
+  ListFilter
 } from 'lucide-react';
 import { EvaluationConfigDialog } from '../components/EvaluationConfigDialog';
 import { DemiFondTempsJusteEvaluationCard } from '../components/DemiFondTempsJusteEvaluationCard';
 import { RunningExactTime, RunningExactTimeData, formatSecondsToMMSS } from '../components/RunningExactTime';
 import { ObserveCriterionModal } from '../components/ObserveCriterionModal';
 import { FastFieldObservationModal } from '../components/FastFieldObservationModal';
+import { ExpressRafaleModal } from '../components/ExpressRafaleModal';
 import { 
   calculateStudentEvaluation, 
   calculateClassEvaluationStatistics, 
@@ -55,6 +61,10 @@ import {
   extractDemiFondTempsJusteData,
   computeTempsJusteOfficialGrades,
   getCompetenceLevel,
+  computeScoreFromObservedValue,
+  getMatchingScaleInterval,
+  formatObservedValue,
+  stepObservedValue,
   StudentEvaluationSummary
 } from '../lib/evaluationHelpers';
 import { EvaluationCriterion, Student } from '../types';
@@ -103,6 +113,9 @@ export function EvaluationMode() {
   const [localGrades, setLocalGrades] = useState<Record<string, Record<string, number | string>>>(activity?.grades || {});
   const [localAppreciations, setLocalAppreciations] = useState<Record<string, string>>(activity?.studentAppreciations || {});
 
+  // Local state for raw observations (passes, seconds, chrono, speed...)
+  const [localRawObservations, setLocalRawObservations] = useState<Record<string, Record<string, number | string>>>(activity?.rawObservations || {});
+
   // Criteria configuration state
   const [criteria, setCriteria] = useState<EvaluationCriterion[]>(() => {
     if (activity?.evaluationCriteria && activity.evaluationCriteria.length > 0) {
@@ -117,8 +130,12 @@ export function EvaluationMode() {
   const [printMode, setPrintMode] = useState<'summary' | 'bulletins' | null>(null);
   const [savedToBankSuccess, setSavedToBankSuccess] = useState(false);
 
-  // Mode de grille : 'observation' (Paliers observables & ce qui est fait) vs 'numeric' (Saisie chiffrée directe)
-  const [gridDisplayMode, setGridDisplayMode] = useState<'observation' | 'numeric'>('observation');
+  // Mode de grille : 'values' (Saisie rapide des valeurs observées : passes, temps...) vs 'observation' (Paliers 1 à 4) vs 'numeric' (Saisie chiffrée directe)
+  const [gridDisplayMode, setGridDisplayMode] = useState<'values' | 'observation' | 'numeric'>('values');
+  const [isAutoAdvanceEnabled, setIsAutoAdvanceEnabled] = useState<boolean>(true);
+  const [isRafaleModalOpen, setIsRafaleModalOpen] = useState<boolean>(false);
+  const [rafaleCriterionId, setRafaleCriterionId] = useState<string>('');
+  const [activeColumnMenu, setActiveColumnMenu] = useState<string | null>(null);
   const [observingModalState, setObservingModalState] = useState<{
     studentId: string;
     studentName: string;
@@ -524,10 +541,16 @@ export function EvaluationMode() {
   };
 
   // Save changes
-  const handleSaveAll = (updatedGrades = localGrades, updatedAppreciations = localAppreciations, updatedCriteria = criteria) => {
+  const handleSaveAll = (
+    updatedGrades = localGrades, 
+    updatedAppreciations = localAppreciations, 
+    updatedCriteria = criteria,
+    updatedRawObservations = localRawObservations
+  ) => {
     setSaveStatus('saving');
     updateActivity(activity.id, {
       grades: updatedGrades,
+      rawObservations: updatedRawObservations,
       studentAppreciations: updatedAppreciations,
       evaluationCriteria: updatedCriteria,
       evaluationDate: new Date().toISOString()
@@ -548,9 +571,149 @@ export function EvaluationMode() {
         studentG[criterionId] = val;
       }
       const next = { ...prev, [studentId]: studentG };
-      handleSaveAll(next, localAppreciations, criteria);
+      handleSaveAll(next, localAppreciations, criteria, localRawObservations);
       return next;
     });
+  };
+
+  // Change a raw observation (temps, passes, chrono...) and automatically compute corresponding score
+  const handleRawObservationChange = (studentId: string, criterionId: string, rawVal: number | string) => {
+    const nextRaw = {
+      ...localRawObservations,
+      [studentId]: {
+        ...(localRawObservations[studentId] || {}),
+        [criterionId]: rawVal
+      }
+    };
+    if (rawVal === '' || rawVal === null || rawVal === undefined) {
+      delete nextRaw[studentId][criterionId];
+    }
+    setLocalRawObservations(nextRaw);
+
+    const crit = criteria.find(c => c.id === criterionId);
+    let nextGrades = localGrades;
+    if (crit) {
+      if (rawVal === '' || rawVal === null || rawVal === undefined) {
+        const studentG = { ...(localGrades[studentId] || {}) };
+        delete studentG[criterionId];
+        nextGrades = { ...localGrades, [studentId]: studentG };
+        setLocalGrades(nextGrades);
+      } else {
+        const computed = computeScoreFromObservedValue(crit, rawVal);
+        if (computed !== null) {
+          const studentG = { ...(localGrades[studentId] || {}), [criterionId]: computed };
+          nextGrades = { ...localGrades, [studentId]: studentG };
+          setLocalGrades(nextGrades);
+        }
+      }
+    }
+    handleSaveAll(nextGrades, localAppreciations, criteria, nextRaw);
+  };
+
+  // Increment or decrement raw observation
+  const handleStepRawValue = (studentId: string, crit: EvaluationCriterion, delta: number) => {
+    const current = localRawObservations[studentId]?.[crit.id];
+    const nextVal = stepObservedValue(crit, current ?? 0, delta);
+    handleRawObservationChange(studentId, crit.id, nextVal);
+  };
+
+  // Quick action: Marquer tous les élèves de la classe comme Présents
+  const handleMarkAllPresent = () => {
+    setLocalGrades(prev => {
+      const next = { ...prev };
+      parentClass.students.forEach(st => {
+        const studentG = { ...(next[st.id] || {}) };
+        criteria.forEach(c => {
+          if (studentG[c.id] === 'A' || studentG[c.id] === 'D') {
+            delete studentG[c.id];
+          }
+        });
+        next[st.id] = studentG;
+      });
+      handleSaveAll(next, localAppreciations, criteria, localRawObservations);
+      return next;
+    });
+  };
+
+  // Quick action: Pré-remplir la colonne d'un critère à un palier donné pour les élèves non encore évalués
+  const handlePreFillCriterionLevel = (criterionId: string, levelNum: 1 | 2 | 3 | 4) => {
+    const crit = criteria.find(c => c.id === criterionId);
+    if (!crit) return;
+    const levels = getCriterionLevels(crit);
+    const targetLevel = levels.find(l => l.level === levelNum);
+    if (!targetLevel) return;
+
+    let anyChanged = false;
+    const nextGrades = { ...localGrades };
+    const nextRaw = { ...localRawObservations };
+
+    parentClass.students.forEach(st => {
+      const current = nextGrades[st.id]?.[criterionId];
+      if (current === undefined || current === '' || current === null) {
+        if (!nextGrades[st.id]) nextGrades[st.id] = {};
+        if (!nextRaw[st.id]) nextRaw[st.id] = {};
+
+        nextGrades[st.id][criterionId] = targetLevel.points;
+
+        if (crit.scaleIntervals && crit.scaleIntervals.length > 0) {
+          const match = crit.scaleIntervals.find(si => si.level === levelNum || si.points === targetLevel.points);
+          const repVal = match?.min !== undefined ? match.min : (match?.max ?? targetLevel.points);
+          nextRaw[st.id][criterionId] = repVal;
+        } else {
+          nextRaw[st.id][criterionId] = levelNum;
+        }
+        anyChanged = true;
+      }
+    });
+
+    if (anyChanged) {
+      setLocalGrades(nextGrades);
+      setLocalRawObservations(nextRaw);
+      handleSaveAll(nextGrades, localAppreciations, criteria, nextRaw);
+    }
+    setActiveColumnMenu(null);
+  };
+
+  // Quick action: Vider les notes d'un critère
+  const handleClearCriterion = (criterionId: string) => {
+    if (!window.confirm("Voulez-vous réinitialiser toutes les notes de ce critère ?")) return;
+    const nextGrades = { ...localGrades };
+    const nextRaw = { ...localRawObservations };
+    parentClass.students.forEach(st => {
+      if (nextGrades[st.id]) delete nextGrades[st.id][criterionId];
+      if (nextRaw[st.id]) delete nextRaw[st.id][criterionId];
+    });
+    setLocalGrades(nextGrades);
+    setLocalRawObservations(nextRaw);
+    handleSaveAll(nextGrades, localAppreciations, criteria, nextRaw);
+    setActiveColumnMenu(null);
+  };
+
+  // Keyboard navigation for fast grid entry (Spreadsheet style)
+  const handleCellKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, rowIndex: number, cIdx: number) => {
+    if (e.key === 'Enter' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextInput = document.getElementById(`cell-${rowIndex + 1}-${cIdx}`) as HTMLInputElement | null;
+      if (nextInput) {
+        nextInput.focus();
+        nextInput.select();
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevInput = document.getElementById(`cell-${rowIndex - 1}-${cIdx}`) as HTMLInputElement | null;
+      if (prevInput) {
+        prevInput.focus();
+        prevInput.select();
+      }
+    } else if (e.key === 'Tab') {
+      // Natural tab will navigate columns, select text
+      setTimeout(() => {
+        const active = document.activeElement as HTMLInputElement | null;
+        if (active && active.tagName === 'INPUT') {
+          active.select();
+        }
+      }, 20);
+    }
   };
 
   // Set student status: 'present' | 'absent' | 'dispense'
@@ -1085,8 +1248,20 @@ export function EvaluationMode() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-                {/* Switcher Mode Observation / Mode Chiffré */}
+                {/* Switcher Mode Saisie Valeurs / Paliers / Chiffres */}
                 <div className="inline-flex rounded-xl border border-slate-200 p-0.5 bg-white shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setGridDisplayMode('values')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      gridDisplayMode === 'values'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="Entrer directement la valeur observée (temps, passes, km/h, etc.) et calculer automatiquement la note"
+                  >
+                    <span>⏱️ Valeurs (passes, temps...)</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setGridDisplayMode('observation')}
@@ -1098,7 +1273,7 @@ export function EvaluationMode() {
                     title="Observer ce que fait l'élève (paliers 1 à 4) et convertir en note"
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    Paliers observés (1 à 4)
+                    <span>Paliers (P1-P4)</span>
                   </button>
                   <button
                     type="button"
@@ -1110,16 +1285,56 @@ export function EvaluationMode() {
                     }`}
                     title="Saisie chiffrée manuelle"
                   >
-                    <span>🔢 Chiffres</span>
+                    <span>🔢 Notes</span>
                   </button>
                 </div>
+
+                {/* Bouton Phare : MODE SAISIE RAFALE (1 clic / élève) */}
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setRafaleCriterionId(criteria[0]?.id || '');
+                    setIsRafaleModalOpen(true);
+                  }}
+                  className="text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-black shadow-sm ring-1 ring-amber-400"
+                  title="Évaluer la classe en continu à toute vitesse (1 clic ou touches 1, 2, 3, 4)"
+                >
+                  <Zap className="w-3.5 h-3.5 mr-1 fill-slate-950" />
+                  Saisie Rafale (1 clic/élève)
+                </Button>
+
+                {/* Toggle Avance automatique */}
+                <button
+                  type="button"
+                  onClick={() => setIsAutoAdvanceEnabled(v => !v)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${
+                    isAutoAdvanceEnabled
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs'
+                      : 'bg-white text-slate-500 border-slate-200'
+                  }`}
+                  title="Passer automatiquement à l'élève suivant lors de la saisie"
+                >
+                  <span className={`w-2 h-2 rounded-full ${isAutoAdvanceEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                  <span>Avance auto {isAutoAdvanceEnabled ? 'ON' : 'OFF'}</span>
+                </button>
+
+                {/* Bouton Remplissage / Tous Présents */}
+                <button
+                  type="button"
+                  onClick={handleMarkAllPresent}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1"
+                  title="Marquer tous les élèves comme Présents (P)"
+                >
+                  <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Tous Présents</span>
+                </button>
 
                 {/* Bouton Mode Terrain direct */}
                 <Button
                   size="sm"
                   onClick={() => setIsFastObservationModalOpen(true)}
                   className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-2xs"
-                  title="Ouvrir le mode observateur plein écran pour observer ce que font les élèves"
+                  title="Ouvrir le mode observateur de terrain pour observer les élèves un par un"
                 >
                   <Eye className="w-3.5 h-3.5 mr-1" />
                   Mode Terrain
@@ -1133,7 +1348,7 @@ export function EvaluationMode() {
                   title="Transformer les observations réelles prises pendant les séances (Temps Juste, compteurs, chronos) en notes selon le barème"
                 >
                   <Sparkles className="w-3.5 h-3.5 mr-1 text-amber-300" />
-                  Convertir observations terrain
+                  Convertir observations
                 </Button>
 
                 <button
@@ -1147,7 +1362,7 @@ export function EvaluationMode() {
                   title="Afficher les repères d'observation (ce qui est fait) pour chaque palier"
                 >
                   <HelpCircle className="w-3.5 h-3.5 text-amber-600" />
-                  <span>{showRubricLegend ? 'Masquer repères' : 'Repères d\'observation'}</span>
+                  <span>{showRubricLegend ? 'Masquer repères' : 'Repères barème'}</span>
                 </button>
 
                 <span className="text-[11px] font-bold text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-200">
@@ -1231,16 +1446,94 @@ export function EvaluationMode() {
                     <th className="px-4 py-3 font-bold w-12 text-center">N°</th>
                     <th className="px-4 py-3 font-bold min-w-[160px]">Élève</th>
                     <th className="px-3 py-3 font-bold text-center w-28">Statut</th>
-                    {criteria.map((crit, idx) => (
-                      <th key={crit.id} className="px-3 py-3 font-bold text-center min-w-[110px] bg-slate-50">
-                        <div className="truncate max-w-[130px] font-black text-slate-900" title={crit.label}>
-                          {crit.label}
-                        </div>
-                        <div className="text-[10px] text-slate-500 font-normal">
-                          /{crit.maxScore} (coeff {crit.weight})
-                        </div>
-                      </th>
-                    ))}
+                    {criteria.map((crit, cIdx) => {
+                      const unit = crit.unit || (
+                        crit.measurementType === 'number' ? 'passes' :
+                        crit.measurementType === 'time_seconds' ? 's' :
+                        crit.measurementType === 'time_mm_ss' ? 'min:s' :
+                        crit.measurementType === 'speed' ? 'km/h' :
+                        crit.measurementType === 'distance' ? 'm' : ''
+                      );
+
+                      return (
+                        <th key={crit.id} className="px-2 py-2.5 text-center min-w-[130px] bg-slate-50 relative border-r border-slate-200">
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="flex items-center justify-between w-full px-1">
+                              <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-800 font-black text-[9px] flex items-center justify-center shrink-0">
+                                {cIdx + 1}
+                              </span>
+
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRafaleCriterionId(crit.id);
+                                    setIsRafaleModalOpen(true);
+                                  }}
+                                  className="px-1.5 py-0.5 rounded bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-[9px] flex items-center gap-0.5 shadow-2xs transition-transform active:scale-95"
+                                  title="Lancer la saisie en rafale (1 clic/élève) sur ce critère"
+                                >
+                                  <Zap className="w-2.5 h-2.5 fill-current" />
+                                  Rafale
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveColumnMenu(activeColumnMenu === crit.id ? null : crit.id)}
+                                  className="p-0.5 rounded hover:bg-slate-200 text-slate-500"
+                                  title="Actions rapides sur la colonne"
+                                >
+                                  <ChevronDown className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="truncate max-w-[130px] font-black text-slate-900 text-xs" title={crit.label}>
+                              {crit.label}
+                            </div>
+
+                            <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                              <span>/{crit.maxScore} (c{crit.weight})</span>
+                              {unit && (
+                                <span className="bg-indigo-50 text-indigo-700 font-bold px-1 rounded border border-indigo-100 font-mono">
+                                  {unit}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Dropdown actions rapides de la colonne */}
+                            {activeColumnMenu === crit.id && (
+                              <div className="absolute z-30 top-12 left-2 bg-white rounded-xl shadow-xl border border-slate-200 p-1.5 text-left text-xs space-y-1 w-48 animate-in fade-in">
+                                <button
+                                  type="button"
+                                  onClick={() => handlePreFillCriterionLevel(crit.id, 3)}
+                                  className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-emerald-50 text-emerald-800 font-bold flex items-center gap-1.5"
+                                >
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                  Remplir non-évalués à P3
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handlePreFillCriterionLevel(crit.id, 4)}
+                                  className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-indigo-50 text-indigo-800 font-bold flex items-center gap-1.5"
+                                >
+                                  <Check className="w-3.5 h-3.5 text-indigo-600" />
+                                  Remplir non-évalués à P4
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleClearCriterion(crit.id)}
+                                  className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-red-50 text-red-700 font-bold flex items-center gap-1.5"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5 text-red-600" />
+                                  Effacer cette colonne
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </th>
+                      );
+                    })}
                     <th className="px-3 py-3 font-bold text-center w-24 bg-indigo-50/80 text-indigo-900 border-l border-indigo-100">
                       Total brut
                     </th>
@@ -1334,19 +1627,102 @@ export function EvaluationMode() {
                         </td>
 
                         {/* Criteria Inputs */}
-                        {criteria.map(crit => {
+                        {criteria.map((crit, cIdx) => {
                           const val = summary.scores[crit.id];
+                          const rawObsVal = localRawObservations[summary.studentId]?.[crit.id];
                           const isSpecial = val === 'A' || val === 'D';
                           const levels = getCriterionLevels(crit);
+                          const matchedInterval = rawObsVal !== undefined && rawObsVal !== '' ? getMatchingScaleInterval(crit, rawObsVal) : null;
+                          const matchedLevel = levels.find(l => typeof val === 'number' && Math.abs(val - l.points) < 0.1) || (matchedInterval?.level ? levels.find(l => l.level === matchedInterval.level) : null);
+                          const unit = crit.unit || (
+                            crit.measurementType === 'number' ? 'passes' :
+                            crit.measurementType === 'time_seconds' ? 's' :
+                            crit.measurementType === 'time_mm_ss' ? 'min:s' :
+                            crit.measurementType === 'speed' ? 'km/h' :
+                            crit.measurementType === 'distance' ? 'm' : ''
+                          );
 
                           return (
-                            <td key={crit.id} className="px-2 py-2 text-center bg-slate-50/40">
+                            <td key={crit.id} className="px-2 py-2 text-center bg-slate-50/40 border-r border-slate-100">
                               {isSpecial ? (
-                                <span className={`inline-block px-2 py-1 rounded font-bold font-mono text-[11px] ${
-                                  val === 'A' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
+                                <span className={`inline-block px-2.5 py-1 rounded-lg font-bold font-mono text-[11px] ${
+                                  val === 'A' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
                                 }`}>
-                                  {val}
+                                  {val === 'A' ? 'Absent' : 'Dispensé'}
                                 </span>
+                              ) : gridDisplayMode === 'values' ? (
+                                <div className="flex flex-col items-center gap-1 py-1">
+                                  {/* Steppers & Valeur observée saisie */}
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStepRawValue(summary.studentId, crit, -1)}
+                                      className="w-5 h-7 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs transition-colors flex items-center justify-center shrink-0"
+                                      title="Diminuer de 1"
+                                    >
+                                      -
+                                    </button>
+
+                                    <div className="relative flex items-center bg-white border border-slate-300 focus-within:border-indigo-600 focus-within:ring-2 focus-within:ring-indigo-600/20 rounded-lg px-1.5 py-0.5 shadow-2xs">
+                                      <input
+                                        id={`cell-${index}-${cIdx}`}
+                                        type="text"
+                                        value={rawObsVal !== undefined ? rawObsVal : ''}
+                                        placeholder="0"
+                                        onFocus={e => e.target.select()}
+                                        onChange={e => handleRawObservationChange(summary.studentId, crit.id, e.target.value)}
+                                        onKeyDown={e => handleCellKeyDown(e, index, cIdx)}
+                                        className="w-12 text-center text-xs font-black font-mono text-slate-900 focus:outline-none"
+                                      />
+                                      {unit && (
+                                        <span className="text-[10px] text-slate-400 font-bold ml-0.5 select-none" title={unit}>
+                                          {unit}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStepRawValue(summary.studentId, crit, 1)}
+                                      className="w-5 h-7 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black text-xs transition-colors flex items-center justify-center shrink-0"
+                                      title="Augmenter de 1"
+                                    >
+                                      +
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => setObservingModalState({
+                                        studentId: summary.studentId,
+                                        studentName: summary.studentName,
+                                        criterion: crit
+                                      })}
+                                      className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100 transition-colors"
+                                      title="Fiche détaillée d'observation"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+
+                                  {/* Note barème correspondante calculée */}
+                                  <div className="flex items-center gap-1 text-[11px]">
+                                    <span className="text-[10px] text-slate-400 font-bold">➔</span>
+                                    <span className={`font-mono font-black ${typeof val === 'number' ? 'text-indigo-900 bg-indigo-50 px-1 py-0.2 rounded border border-indigo-200' : 'text-slate-400'}`}>
+                                      {typeof val === 'number' ? `${val}` : '—'}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">/{crit.maxScore}</span>
+                                    {matchedLevel && (
+                                      <span className={`text-[9px] font-black uppercase px-1 rounded border ${
+                                        matchedLevel.level === 1 ? 'bg-red-100 text-red-800 border-red-200' :
+                                        matchedLevel.level === 2 ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                                        matchedLevel.level === 3 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                                        'bg-indigo-100 text-indigo-800 border-indigo-200'
+                                      }`}>
+                                        P{matchedLevel.level}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               ) : gridDisplayMode === 'observation' ? (
                                 <div className="flex flex-col items-center gap-1.5 py-1">
                                   {/* 4 Paliers d'observation : 1 (Insuffisant), 2 (Fragile), 3 (Satisfaisant), 4 (Très bon) */}
@@ -1365,7 +1741,21 @@ export function EvaluationMode() {
                                         <button
                                           key={lvl.level}
                                           type="button"
-                                          onClick={() => handleScoreChange(summary.studentId, crit.id, lvl.points)}
+                                          onClick={() => {
+                                            handleScoreChange(summary.studentId, crit.id, lvl.points);
+                                            if (crit.scaleIntervals && crit.scaleIntervals.length > 0) {
+                                              const match = crit.scaleIntervals.find(si => si.level === lvl.level || si.points === lvl.points);
+                                              const repVal = match?.min !== undefined ? match.min : (match?.max ?? lvl.points);
+                                              handleRawObservationChange(summary.studentId, crit.id, repVal);
+                                            } else {
+                                              handleRawObservationChange(summary.studentId, crit.id, lvl.level);
+                                            }
+                                            if (isAutoAdvanceEnabled) {
+                                              const nextEl = document.getElementById(`obs-btn-${index + 1}-${cIdx}-1`);
+                                              if (nextEl) nextEl.focus();
+                                            }
+                                          }}
+                                          id={`obs-btn-${index}-${cIdx}-${lvl.level}`}
                                           title={`Palier ${lvl.level} (${lvl.label})\nCe qui est fait : « ${lvl.descriptor} »\nNote correspondante : ${lvl.points}/${crit.maxScore} pts`}
                                           className={`w-6 h-6 rounded-md text-[11px] font-black transition-all ${colorClass}`}
                                         >
@@ -1398,12 +1788,15 @@ export function EvaluationMode() {
                               ) : (
                                 <div className="flex items-center justify-center">
                                   <input
+                                    id={`cell-${index}-${cIdx}`}
                                     type="number"
                                     min={0}
                                     max={crit.maxScore}
                                     step={0.5}
                                     value={val !== undefined ? val : ''}
                                     placeholder={`/${crit.maxScore}`}
+                                    onFocus={e => e.target.select()}
+                                    onKeyDown={e => handleCellKeyDown(e, index, cIdx)}
                                     onChange={e => {
                                       const raw = e.target.value;
                                       if (raw === '') {
@@ -1778,6 +2171,82 @@ export function EvaluationMode() {
                           </div>
                         </div>
                       </div>
+
+                      {/* ZONE DE SAISIE RAPIDE DE LA VALEUR OBSERVÉE (Si critère quantitatif ou seuils) */}
+                      {Boolean(crit.measurementType && crit.measurementType !== 'qualitative') && (
+                        <div className="p-3.5 bg-gradient-to-r from-indigo-50/70 via-slate-50 to-amber-50/60 rounded-xl border border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-amber-500" />
+                            <div>
+                              <span className="text-xs font-black uppercase text-indigo-950 block">
+                                Saisie de la valeur observée sur le terrain :
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                L'application calcule et sélectionne le palier correspondant
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+                              <button
+                                type="button"
+                                onClick={() => handleStepRawValue(selectedStudentId, crit, -5)}
+                                className="px-2 py-1 text-xs font-bold rounded text-slate-600 hover:bg-slate-100"
+                                title="Diminuer de 5"
+                              >
+                                -5
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleStepRawValue(selectedStudentId, crit, -1)}
+                                className="px-2 py-1 text-xs font-bold rounded text-slate-600 hover:bg-slate-100"
+                                title="Diminuer de 1"
+                              >
+                                -1
+                              </button>
+                            </div>
+
+                            <div className="flex items-center bg-white border-2 border-indigo-500 rounded-xl px-2.5 py-1 shadow-2xs">
+                              <input
+                                type="text"
+                                value={localRawObservations[selectedStudentId]?.[crit.id] ?? ''}
+                                onChange={e => handleRawObservationChange(selectedStudentId, crit.id, e.target.value)}
+                                placeholder="0"
+                                className="w-16 text-center font-black font-mono text-sm text-slate-900 focus:outline-none"
+                              />
+                              <span className="text-xs font-black text-indigo-600 pl-1">
+                                {crit.unit || (
+                                  crit.measurementType === 'number' ? 'passes' :
+                                  crit.measurementType === 'time_seconds' ? 's' :
+                                  crit.measurementType === 'time_mm_ss' ? 'min:s' :
+                                  crit.measurementType === 'speed' ? 'km/h' :
+                                  crit.measurementType === 'distance' ? 'm' : ''
+                                )}
+                              </span>
+                            </div>
+
+                            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+                              <button
+                                type="button"
+                                onClick={() => handleStepRawValue(selectedStudentId, crit, 1)}
+                                className="px-2 py-1 text-xs font-bold rounded text-indigo-700 hover:bg-indigo-50"
+                                title="Augmenter de 1"
+                              >
+                                +1
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleStepRawValue(selectedStudentId, crit, 5)}
+                                className="px-2 py-1 text-xs font-bold rounded text-indigo-700 hover:bg-indigo-50"
+                                title="Augmenter de 5"
+                              >
+                                +5
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* OBSERVATION GRID : 4 Paliers observables de ce qui est fait */}
                       <div className="space-y-2">
@@ -2620,8 +3089,12 @@ export function EvaluationMode() {
           studentName={observingModalState.studentName}
           criterion={observingModalState.criterion}
           currentScore={localGrades[observingModalState.studentId]?.[observingModalState.criterion.id]}
+          rawObservation={localRawObservations[observingModalState.studentId]?.[observingModalState.criterion.id]}
           onSelectScore={(score) => {
             handleScoreChange(observingModalState.studentId, observingModalState.criterion.id, score);
+          }}
+          onSelectRawObservation={(rawVal, computedScore) => {
+            handleRawObservationChange(observingModalState.studentId, observingModalState.criterion.id, rawVal);
           }}
           onNextCriterion={() => {
             const currentCritIdx = criteria.findIndex(c => c.id === observingModalState.criterion.id);
@@ -2648,12 +3121,32 @@ export function EvaluationMode() {
           students={parentClass.students || []}
           criteria={criteria}
           grades={localGrades}
+          rawObservations={localRawObservations}
           appreciations={localAppreciations}
           observations={actObservations}
           onScoreChange={(stId, critId, score) => handleScoreChange(stId, critId, score)}
+          onRawObservationChange={(stId, critId, val) => handleRawObservationChange(stId, critId, val)}
           onAppreciationChange={(stId, text) => handleAppreciationChange(stId, text)}
           onStatusChange={(stId, status) => handleSetStudentStatus(stId, status)}
           initialStudentId={selectedStudentId}
+        />
+      )}
+
+      {/* EXPRESS RAFALE MODAL (MODE SAISIE RAFALE 1 CLIC / ELEVE) */}
+      {isRafaleModalOpen && (
+        <ExpressRafaleModal
+          isOpen={isRafaleModalOpen}
+          onClose={() => setIsRafaleModalOpen(false)}
+          className={parentClass.name}
+          activityName={activity.name}
+          students={parentClass.students || []}
+          criteria={criteria}
+          initialCriterionId={rafaleCriterionId || criteria[0]?.id}
+          grades={localGrades}
+          rawObservations={localRawObservations}
+          onScoreChange={(stId, critId, score) => handleScoreChange(stId, critId, score)}
+          onRawObservationChange={(stId, critId, val) => handleRawObservationChange(stId, critId, val)}
+          onStatusChange={(stId, status) => handleSetStudentStatus(stId, status)}
         />
       )}
     </div>
